@@ -1,6 +1,6 @@
 # GDG MCET Cloud Learning Tracker
 
-A single-page Streamlit portal for GDG on Campus at Methodist College of Engineering and Technology. The sidebar switches the main content between Home and Leaderboard. The Admin and About pages have been removed from the app; the CSV synchronization logic remains in `tracker.py`, but CSV uploads and student administration are not currently available through the UI.
+A Streamlit portal for GDG on Campus at Methodist College of Engineering and Technology. The sidebar switches between Home and Leaderboard. When `GDG_ADMIN_PASSWORD` is configured, an authenticated Admin page is also available for CSV imports, student visibility approvals, import history, and gamification settings.
 
 The supplied Google Cloud logo image is stored in `assets/google-cloud-logo.png` and is used in the sidebar and the Home and Leaderboard banners.
 
@@ -32,7 +32,7 @@ The local database is created at `data/gdg_tracker.db`. Set `GDG_DB_PATH` to cho
 
 ## Student privacy
 
-Public search displays only approved profiles and returns a student's name, roll number, completed badge titles, and access-code redemption status. Students can search by name, roll number, or exact email; the email is used only for matching and is never displayed. The Home page also includes an incrementally loaded list of approved participants with their public badge progress and a filter for participant names or roll numbers. GEAR program details are shown only for students whose GEAR badge field indicates GEAR participation; profile URLs and raw access codes are never displayed. Incomplete profiles show learning links for the campaign syllabus, lab playlist, and the Step 1 credit-claim guide, alongside a WhatsApp help button. Completed profiles celebrate all 10 skill badges with a completion message and visual effects. Public pages rank students by badge progress and do not display XP or platform levels. Use HTTPS for any public deployment.
+Public search and the Home-page participant list show only profiles explicitly approved by an administrator. They return a student's name, roll number, completed badge titles, and access-code redemption status. Students can search by name, roll number, or exact email; the email is used only for matching and is never displayed. The participant list has a filter for names and roll numbers. GEAR program details are shown only for students whose GEAR badge field indicates GEAR participation; profile URLs and raw access codes are never displayed. Incomplete profiles show learning links for the campaign syllabus, lab playlist, and the Step 1 credit-claim guide, alongside a WhatsApp help button. Completed profiles celebrate all 10 skill badges with a completion message and visual effects. Public pages rank students by badge progress and do not display XP or platform levels. Use HTTPS for any public deployment.
 
 ## CSV synchronization rules
 
@@ -54,7 +54,15 @@ The app is a standard Streamlit application and can run on any host that support
 - Start: `streamlit run app.py --server.address 0.0.0.0 --server.port $PORT`
 - Persistent database path: `GDG_DB_PATH`
 
-**Use a host with a persistent disk** and set `GDG_DB_PATH` to a file on that mounted disk (for example `/var/data/gdg_tracker.db`). Do not rely on an ephemeral container filesystem for the database: student records and import history would be lost when the instance is replaced. For multiple app instances, use a shared managed database instead of SQLite. Put the app behind HTTPS. The current public app does not expose admin or CSV import controls.
+**Use a host with a persistent disk** and set `GDG_DB_PATH` to a file on that mounted disk (for example `/var/data/gdg_tracker.db`). Do not rely on an ephemeral container filesystem for the database: student records and import history would be lost when the instance is replaced. For multiple app instances, use a shared managed database instead of SQLite. Put the app behind HTTPS.
+
+For Streamlit Community Cloud, add an admin password in the app's **Settings → Secrets** (never commit it):
+
+```toml
+GDG_ADMIN_PASSWORD = "use-a-long-unique-password"
+```
+
+After redeploying, use the **Admin** item in the sidebar to preview and import the CSV, then approve only the profiles intended for public display in **Students**. The CSV and local database are intentionally excluded from GitHub. Community Cloud's local filesystem is not a durable database; use a host with persistent storage or a managed database for participant records that must survive restarts or redeployments.
 
 ## Tests
 

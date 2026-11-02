@@ -16,10 +16,7 @@ class AppTests(unittest.TestCase):
         ):
             app = AppTest.from_file(str(app_path), default_timeout=30).run()
             self.assertFalse(app.exception)
-            self.assertEqual(
-                list(app.radio[0].options),
-                ["Home", "Leaderboard"],
-            )
+            self.assertEqual(list(app.radio[0].options)[:2], ["Home", "Leaderboard"])
             self.assertFalse(any("Admin console" in item.value for item in app.markdown))
 
             app.radio[0].set_value("Leaderboard").run()
@@ -27,6 +24,24 @@ class AppTests(unittest.TestCase):
             self.assertTrue(
                 any("Community leaderboard" in item.value for item in app.markdown)
             )
+
+    def test_admin_navigation_is_available_only_when_password_is_configured(self):
+        app_path = Path(__file__).parent.parent / "app.py"
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
+            os.environ,
+            {
+                "GDG_DB_PATH": str(Path(temp_dir) / "app.db"),
+                "GDG_ADMIN_PASSWORD": "test-admin-password",
+            },
+        ):
+            app = AppTest.from_file(str(app_path), default_timeout=30).run()
+            self.assertFalse(app.exception)
+            self.assertEqual(list(app.radio[0].options), ["Home", "Leaderboard", "Admin"])
+
+            app.radio[0].set_value("Admin").run()
+            self.assertFalse(app.exception)
+            self.assertTrue(any("Admin console" in item.value for item in app.title))
+            self.assertTrue(any(item.label == "Admin password" for item in app.text_input))
 
     def test_home_has_whatsapp_help_and_hides_outdated_update_section(self):
         app_path = Path(__file__).parent.parent / "app.py"

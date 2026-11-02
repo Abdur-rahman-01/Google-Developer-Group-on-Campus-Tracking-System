@@ -812,6 +812,11 @@ def render_admin() -> None:
     heading("Admin console", "Manage sheet imports, student visibility, and community settings.")
     if not admin_login():
         return
+    st.warning(
+        "Student records are stored in the app's SQLite database. Streamlit Community Cloud storage "
+        "may be lost when the app restarts or redeploys; keep a secure backup and use durable storage "
+        "for records that must persist."
+    )
     with st.sidebar:
         if st.button("Sign out of admin"):
             st.session_state.gdg_admin_authenticated = False
@@ -895,14 +900,19 @@ def render_admin() -> None:
 with st.sidebar:
     st.image(str(LOGO_PATH), width=160)
     st.caption("Cloud learning tracker")
+    pages = ["Home", "Leaderboard"]
+    if admin_password():
+        pages.append("Admin")
     page = st.radio(
         "Navigate",
-        ["Home", "Leaderboard"],
+        pages,
         label_visibility="collapsed",
         key="page_navigation",
     )
 
 if page == "Home":
     render_home()
-else:
+elif page == "Leaderboard":
     render_leaderboard()
+else:
+    render_admin()
