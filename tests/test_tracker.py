@@ -236,6 +236,42 @@ class TrackerTests(unittest.TestCase):
         self.assertNotIn("email", first_page[0])
         self.assertNotIn("access_code", first_page[0])
 
+    def test_curated_import_snapshot_preserves_rolls_and_never_exports_access_codes(self):
+        row = self.row(
+            **{
+                "Access Code": "DO-NOT-EXPORT",
+                "Skill Badges Completed Count": "2",
+                "Skill Badges Completed Names": ", ".join(tracker.LAB_CATALOG[:2]),
+            }
+        )
+        self.import_public_profile(row)
+        student = tracker.get_admin_students(db_path=self.db_path)[0]
+        tracker.update_student_settings(
+            student["id"],
+            "MCET-001",
+            True,
+            self.db_path,
+        )
+        snapshot = tracker.export_import_snapshot(self.db_path)
+        self.assertIn("MCET-001", snapshot)
+        self.assertIn("student@example.edu", snapshot)
+        self.assertIn(tracker.LAB_CATALOG[0], snapshot)
+        self.assertNotIn("DO-NOT-EXPORT", snapshot)
+        self.assertNotIn("Access Code,", snapshot)
+
+    def test_import_can_approve_new_students_only_when_explicitly_requested(self):
+        content = self.make_csv([self.row()])
+        preview = self.preview(content)
+        tracker.import_records(
+            preview["records"],
+            "curated-snapshot.csv",
+            preview["errors"],
+            approve_new_students=True,
+            db_path=self.db_path,
+        )
+        student = tracker.get_admin_students(db_path=self.db_path)[0]
+        self.assertTrue(student["public_visible"])
+
     def test_public_search_shows_badges_and_access_status_but_hides_non_gear_details(self):
         search_result, profile = self.import_public_profile(
             self.row(

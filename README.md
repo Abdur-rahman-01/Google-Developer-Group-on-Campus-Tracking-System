@@ -56,6 +56,12 @@ The app is a standard Streamlit application and can run on any host that support
 
 **Use a host with a persistent disk** and set `GDG_DB_PATH` to a file on that mounted disk (for example `/var/data/gdg_tracker.db`). Do not rely on an ephemeral container filesystem for the database: student records and import history would be lost when the instance is replaced. For multiple app instances, use a shared managed database instead of SQLite. Put the app behind HTTPS.
 
+### Render persistent-disk deployment
+
+The repository includes a `render.yaml` Blueprint that mounts a private disk at `/var/data` and stores SQLite there. In Render, create a new Blueprint from this repository and its `username` branch. Set the required `GDG_ADMIN_PASSWORD` environment variable in Render; never commit it. The persistent disk and web service may incur charges.
+
+To migrate the existing curated records, download **Admin → CSV sync → Download curated migration snapshot** from the app that still has the local data. This private file includes email and roll numbers but excludes raw access codes; do not commit or share it publicly. Upload it once to the new app, select **Approve new profiles for public display**, analyze, and import. Then approve any remaining profiles as appropriate. For routine sheet updates, leave that checkbox off and import the new tracking CSV; rows match by email/profile and blank fields preserve existing roll numbers. Keep the Render disk attached to preserve records across deploys.
+
 For Streamlit Community Cloud, add an admin password in the app's **Settings → Secrets** (never commit it):
 
 ```toml

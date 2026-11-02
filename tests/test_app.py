@@ -43,6 +43,28 @@ class AppTests(unittest.TestCase):
             self.assertTrue(any("Admin console" in item.value for item in app.title))
             self.assertTrue(any(item.label == "Admin password" for item in app.text_input))
 
+    def test_csv_import_defaults_to_hidden_profiles_and_offers_private_snapshot_export(self):
+        app_path = Path(__file__).parent.parent / "app.py"
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
+            os.environ,
+            {
+                "GDG_DB_PATH": str(Path(temp_dir) / "app.db"),
+                "GDG_ADMIN_PASSWORD": "test-admin-password",
+            },
+        ):
+            app = AppTest.from_file(str(app_path), default_timeout=30).run()
+            app.radio[0].set_value("Admin").run()
+            app.text_input(key="admin_password_input").set_value("test-admin-password")
+            next(button for button in app.button if button.label == "Sign in").click().run()
+            self.assertFalse(app.exception)
+            self.assertFalse(
+                next(
+                    checkbox.value
+                    for checkbox in app.checkbox
+                    if checkbox.key == "approve_new_students"
+                )
+            )
+
     def test_home_has_whatsapp_help_and_hides_outdated_update_section(self):
         app_path = Path(__file__).parent.parent / "app.py"
         with tempfile.TemporaryDirectory() as temp_dir, patch.dict(

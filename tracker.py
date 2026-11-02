@@ -558,6 +558,7 @@ def import_records(
     filename: str,
     errors: list[dict[str, Any]],
     authoritative: bool = False,
+    approve_new_students: bool = False,
     db_path: str | Path | None = None,
 ) -> dict[str, int]:
     counts = Counter()
@@ -601,7 +602,7 @@ def import_records(
                             developer_profile_url, developer_profile_status, access_code,
                             access_code_status, milestone, gear_badges, badges_count, badges_names,
                             public_visible, created_at, updated_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             roll,
@@ -617,6 +618,7 @@ def import_records(
                             values.get("gear_badges"),
                             count,
                             json.dumps(names),
+                            int(approve_new_students),
                             now,
                             now,
                         ),
@@ -1016,6 +1018,55 @@ def export_students(students: list[dict[str, Any]]) -> str:
                 "completion_percent": int(student["badges_count"]) * 10,
             }
         writer.writerow({field: spreadsheet_safe(row.get(field, "")) for field in fields})
+    return output.getvalue()
+
+
+def export_import_snapshot(db_path: str | Path | None = None) -> str:
+    fields = (
+        "User Name",
+        "User Email",
+        "Google Skills Profile URL",
+        "Google Skills Profile Status",
+        "Google Developer Profile URL",
+        "Google Developer Profile Status",
+        "Access Code Redemption Status",
+        "Milestone Completed",
+        "GEAR Digital Badges",
+        "Skill Badges Completed Count",
+        "Skill Badges Completed Names",
+        "Roll Number",
+    )
+    output = io.StringIO(newline="")
+    writer = csv.DictWriter(output, fieldnames=fields)
+    writer.writeheader()
+    for student in get_admin_students(db_path=db_path):
+        names = json.loads(student.get("badges_names") or "[]")
+        writer.writerow(
+            {
+                "User Name": spreadsheet_safe(student.get("name") or ""),
+                "User Email": spreadsheet_safe(student.get("email") or ""),
+                "Google Skills Profile URL": spreadsheet_safe(
+                    student.get("skills_profile_url") or ""
+                ),
+                "Google Skills Profile Status": spreadsheet_safe(
+                    student.get("skills_profile_status") or ""
+                ),
+                "Google Developer Profile URL": spreadsheet_safe(
+                    student.get("developer_profile_url") or ""
+                ),
+                "Google Developer Profile Status": spreadsheet_safe(
+                    student.get("developer_profile_status") or ""
+                ),
+                "Access Code Redemption Status": spreadsheet_safe(
+                    student.get("access_code_status") or ""
+                ),
+                "Milestone Completed": spreadsheet_safe(student.get("milestone") or ""),
+                "GEAR Digital Badges": spreadsheet_safe(student.get("gear_badges") or ""),
+                "Skill Badges Completed Count": int(student["badges_count"]),
+                "Skill Badges Completed Names": spreadsheet_safe(", ".join(names)),
+                "Roll Number": spreadsheet_safe(student.get("roll_number") or ""),
+            }
+        )
     return output.getvalue()
 
 

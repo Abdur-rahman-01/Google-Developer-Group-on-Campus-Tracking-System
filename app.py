@@ -509,7 +509,23 @@ def render_csv_import() -> None:
         mime="text/csv",
     )
     uploaded = st.file_uploader("Upload the latest Google tracking CSV", type=["csv"], key="csv_upload")
+    approve_new_students = st.checkbox(
+        "Approve new profiles for public display",
+        value=False,
+        help=(
+            "Use only for a trusted, already-curated migration snapshot. "
+            "Leave unchecked for routine tracking-sheet updates."
+        ),
+        key="approve_new_students",
+    )
     if not uploaded:
+        st.download_button(
+            "Download curated migration snapshot",
+            data=tracker.export_import_snapshot().encode("utf-8-sig"),
+            file_name="gdg-mcet-curated-migration.csv",
+            mime="text/csv",
+            help="Contains student emails and roll numbers; keep this file private and never commit it to GitHub.",
+        )
         history = tracker.get_import_history()
         if history:
             last = history[0]
@@ -570,6 +586,7 @@ def render_csv_import() -> None:
                 "digest": digest,
                 "mapping": mapping,
                 "authoritative": authoritative,
+                "approve_new_students": approve_new_students,
                 "confirmed": confirm,
                 "preview": preview,
                 "filename": uploaded.name,
@@ -583,6 +600,7 @@ def render_csv_import() -> None:
         or saved_preview["digest"] != digest
         or saved_preview["mapping"] != mapping
         or saved_preview["authoritative"] != authoritative
+        or saved_preview.get("approve_new_students", False) != approve_new_students
     ):
         st.caption("Analyze the current file and mapping to see its impact.")
         return
@@ -628,6 +646,7 @@ def render_csv_import() -> None:
                 saved_preview["filename"],
                 preview["errors"],
                 authoritative=saved_preview["authoritative"],
+                approve_new_students=saved_preview["approve_new_students"],
             )
             st.session_state.pop("csv_preview", None)
             st.success(
