@@ -58,8 +58,9 @@ st.markdown(
     .block-container { max-width: 1440px; padding-top: 2rem; padding-bottom: 4rem; text-align: center; }
     .block-container h1, .block-container h2, .block-container h3, .block-container h4,
     .block-container p, .block-container [data-testid="stCaptionContainer"],
-    .block-container [data-testid="stMetricLabel"], .block-container [data-testid="stMetricValue"],
     .block-container [data-testid="stProgress"] { text-align: center; }
+    .block-container [data-testid="stMetricLabel"],
+    .block-container [data-testid="stMetricValue"] { text-align: left; }
     [data-testid="stMetric"] {
       background: linear-gradient(145deg, rgba(66,133,244,.34), rgba(25,34,52,.96) 68%);
       border: 1px solid rgba(138,180,248,.38); border-radius: 18px; padding: 18px 20px;
@@ -1041,9 +1042,13 @@ def render_gamification_settings() -> None:
         except (ValueError, KeyError, TypeError) as error:
             st.error(str(error))
 def render_admin() -> None:
-    heading("Admin console", "Manage spreadsheet data, student visibility, and community settings.")
+    heading(
+        "Admin console",
+        "Review participant analytics, roll-number records, spreadsheet sync, and community settings.",
+    )
     if not admin_login():
         return
+    metrics = tracker.get_dashboard_data()
     if SHEET_SYNC_ERROR:
         st.error(f"Google Sheets sync failed: {SHEET_SYNC_ERROR}")
     elif not SHEET_STORE:
@@ -1059,7 +1064,6 @@ def render_admin() -> None:
         if st.button("Sign out of admin"):
             st.session_state.gdg_admin_authenticated = False
             st.rerun()
-    metrics = tracker.get_dashboard_data()
     stat_columns = st.columns(5)
     stat_columns[0].metric("Registered", metrics["students"])
     stat_columns[1].metric("Started", metrics["started"])

@@ -37,7 +37,7 @@ Every participant in **Tracking Data** is public on the Home participant list an
 ## Google Sheets synchronization rules
 
 1. The app reads the full **Tracking Data** tab, detects supported headers, and matches progress records by email or Google Skills profile URL.
-2. The latest tab is treated as an authoritative snapshot, so corrected badge counts can decrease. Progress and XP adjustments are applied only when the source data changes.
+2. The latest tab is treated as an authoritative snapshot, so corrected badge counts can decrease. Progress and XP adjustments are applied only when the source data changes. To refresh it, replace the data rows inside the existing **Tracking Data** tab, preserving its header and email/profile identity columns. Do not delete the tab or replace **rollno map**; that separate tab preserves the curated name-to-roll-number pairs.
 3. Roll numbers are matched by name from **rollno map** and are never overwritten by replacing the tracking export.
 4. All students present in **Tracking Data** are public. Students removed from that tab are hidden on the next successful sync.
 5. The app skips raw access codes. Keep the spreadsheet private because it contains participant email and profile data.
@@ -79,7 +79,7 @@ client_x509_cert_url = "..."
 ```
 
 3. Save the secrets and reboot the app. Open **Admin → Google Sheets** to verify the connection. The app refreshes the tracking tab every two minutes; you can also request an immediate refresh there.
-4. When updating participant progress, replace the data rows in **Tracking Data** while preserving the header row. Do not clear or replace **rollno map**. All rows in Tracking Data are publicly visible, including roll number and profile links; do not put anyone there who should remain private.
+4. When updating participant progress, replace the data rows in **Tracking Data** while preserving the header row and email/profile identity columns. Do not delete or rename the tab, and do not clear or replace **rollno map**. All rows in Tracking Data are publicly visible, including roll number and profile links; do not put anyone there who should remain private.
 
 The spreadsheet must remain private. Google Sheets version history provides recovery for edits; the app's ignored local SQLite file is not required for preserving the roster across deploys. The app's import/sync history and gamification settings remain local and may reset when Community Cloud replaces the app instance.
 

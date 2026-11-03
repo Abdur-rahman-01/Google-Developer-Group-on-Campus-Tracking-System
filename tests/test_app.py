@@ -43,6 +43,54 @@ class AppTests(unittest.TestCase):
             self.assertTrue(any("Admin console" in item.value for item in app.title))
             self.assertTrue(any(item.label == "Admin password" for item in app.text_input))
 
+    def test_authenticated_admin_renders_analysis_and_roll_number_breakdown(self):
+        app_path = Path(__file__).parent.parent / "app.py"
+        student = {
+            "id": 1,
+            "name": "Analysis Student",
+            "roll_number": "MCET-001",
+            "badges_count": 3,
+            "badges_names": '["Badge One"]',
+            "updated_at": "2026-11-03",
+            "public_visible": True,
+            "email": "student@example.edu",
+            "xp": 150,
+        }
+        metrics = {
+            "students": 1,
+            "started": 1,
+            "not_started": 0,
+            "completed": 0,
+            "average": 3.0,
+            "recently_added": 1,
+            "badges": 3,
+            "completion_rate": 0.0,
+            "last_updated": "2026-11-03",
+        }
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
+            os.environ,
+            {
+                "GDG_DB_PATH": str(Path(temp_dir) / "app.db"),
+                "GDG_ADMIN_PASSWORD": "test-admin-password",
+            },
+        ), patch("tracker.get_dashboard_data", return_value=metrics), patch(
+            "tracker.get_all_students", return_value=[student]
+        ), patch("tracker.count_admin_students", return_value=1), patch(
+            "tracker.get_admin_students", return_value=[student]
+        ), patch("tracker.get_xp_transactions", return_value=[]):
+            app = AppTest.from_file(str(app_path), default_timeout=30).run()
+            app.radio[0].set_value("Admin").run()
+            app.session_state["gdg_admin_authenticated"] = True
+            app.run()
+
+            self.assertFalse(app.exception)
+            self.assertTrue(any(item.label == "Registered" for item in app.metric))
+            self.assertTrue(any("Student progress distribution" in item.value for item in app.markdown))
+            self.assertTrue(any("Top performers" in item.value for item in app.markdown))
+            self.assertTrue(
+                any("MCET-001" in str(frame) for frame in (item.value for item in app.dataframe))
+            )
+
     def test_home_has_whatsapp_help_and_hides_outdated_update_section(self):
         app_path = Path(__file__).parent.parent / "app.py"
         with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
