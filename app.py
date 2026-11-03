@@ -589,7 +589,7 @@ def render_home() -> None:
         st.info("The leaderboard will appear when participant data is available.")
     st.markdown("---")
     st.subheader("GDG participants")
-    st.caption("Browse participants from the tracking sheet, their badge progress, and profile links.")
+    st.caption("Browse names only, or search by name or roll number to find a participant.")
     participant_search = st.text_input(
         "Filter participants",
         placeholder="Search participant name or roll number",
@@ -609,10 +609,6 @@ def render_home() -> None:
             [
                 {
                     "Participant": participant["name"],
-                    "Roll number": participant.get("roll_number") or "Not assigned",
-                    "Badges completed": f'{participant["badges_count"]}/10',
-                    "Google Skills profile": participant.get("skills_profile_url") or "",
-                    "Google Developer profile": participant.get("developer_profile_url") or "",
                 }
                 for participant in participants
             ]
@@ -622,14 +618,6 @@ def render_home() -> None:
             width="stretch",
             hide_index=True,
             height=min(460, 38 + 35 * len(participants)),
-            column_config={
-                "Google Skills profile": st.column_config.LinkColumn(
-                    "Google Skills profile", display_text="Open profile"
-                ),
-                "Google Developer profile": st.column_config.LinkColumn(
-                    "Google Developer profile", display_text="Open profile"
-                ),
-            },
         )
         if has_more_participants and st.button(
             "Load more participants",

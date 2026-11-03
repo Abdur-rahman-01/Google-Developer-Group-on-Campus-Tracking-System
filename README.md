@@ -32,7 +32,7 @@ The local database is created at `data/gdg_tracker.db`. Set `GDG_DB_PATH` to cho
 
 ## Student privacy
 
-Every participant in **Tracking Data** is public on the Home participant list and leaderboard. Public pages display curated roll numbers and link to both Google Skills and Google Developer profiles when present. Student emails and raw access codes are never displayed. Keep the spreadsheet private, and only include students who should have their name, roll number, progress, and profile links published. GEAR details are shown only for GEAR participants. Incomplete profiles show learning links and a WhatsApp help button; completed profiles celebrate all 10 skill badges. Public pages do not display XP or platform levels. Use HTTPS for any public deployment.
+Every participant in **Tracking Data** is public on the Home participant list and leaderboard. The participant list shows names only and can be filtered by name or roll number. Searching for a participant shows their curated roll number, progress, and Google Skills and Google Developer profile links when present. Student emails and raw access codes are never displayed. Keep the spreadsheet private, and only include students who should have their name, roll number, progress, and profile links published. GEAR details are shown only for GEAR participants. Incomplete profiles show learning links and a WhatsApp help button; completed profiles celebrate all 10 skill badges. Public pages do not display XP or platform levels. Use HTTPS for any public deployment.
 
 ## Google Sheets synchronization rules
 

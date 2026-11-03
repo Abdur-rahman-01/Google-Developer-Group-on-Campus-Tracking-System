@@ -83,6 +83,7 @@ class AppTests(unittest.TestCase):
             self.assertNotIn("Your next badge is one step away", markdown)
             self.assertNotIn("Latest student record update", markdown)
             self.assertTrue(any("GDG participants" in item.value for item in app.subheader))
+            self.assertEqual(list(app.dataframe[0].value.columns), ["Participant"])
             self.assertTrue(
                 any(item.label == "Filter participants" for item in app.text_input)
             )
@@ -90,6 +91,9 @@ class AppTests(unittest.TestCase):
             app.button(key="load_more_participants").click().run()
             self.assertFalse(app.exception)
             participants_query.assert_called_with(limit=50, search="")
+            app.text_input(key="participant_search").set_value("MCET-001").run()
+            self.assertFalse(app.exception)
+            participants_query.assert_called_with(limit=25, search="MCET-001")
             app.text_input(key="participant_search").set_value("Approved").run()
             self.assertFalse(app.exception)
             participants_query.assert_called_with(limit=25, search="Approved")

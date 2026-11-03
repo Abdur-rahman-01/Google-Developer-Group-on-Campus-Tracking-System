@@ -12,7 +12,8 @@ TRACKING_HEADERS = (
 
 
 def _header_key(value: str) -> str:
-    return "".join(str(value).casefold().split()).replace("rollno", "rollnumber")
+    key = "".join(character for character in str(value).casefold() if character.isalnum())
+    return key.replace("rollno", "rollnumber")
 
 
 def _normalize_name(value: str) -> str:
@@ -42,6 +43,20 @@ def _roll_map_columns(headers: list[str]) -> tuple[int, int]:
             'The roll-number map needs "Name" and "Roll Number" columns.'
         )
     return name_index, roll_index
+
+
+def _find_roll_map_header(values: list[list[str]]) -> tuple[int, list[str], int, int]:
+    for row_index, row in enumerate(values[:10]):
+        headers = [str(value).strip() for value in row]
+        try:
+            name_index, roll_index = _roll_map_columns(headers)
+        except ValueError:
+            continue
+        return row_index, headers, name_index, roll_index
+    raise ValueError(
+        'Could not find "Name" and "Roll Number" columns in the first 10 rows '
+        "of the roll-number map tab. Check the configured tab name and header row."
+    )
 
 
 def _update_row(worksheet, row_number: int, values: list[str]) -> None:
@@ -113,12 +128,11 @@ class GoogleSheetsStore:
         if not values:
             _update_row(worksheet, 1, list(TRACKING_HEADERS))
             return []
-        headers = [str(value).strip() for value in values[0]]
-        name_index, roll_index = _roll_map_columns(headers)
+        header_row, headers, name_index, roll_index = _find_roll_map_header(values)
         rows = []
         seen_names: set[str] = set()
         seen_roll_numbers: set[str] = set()
-        for values_row in values[1:]:
+        for values_row in values[header_row + 1 :]:
             padded = [*values_row, *("" for _ in range(len(headers) - len(values_row)))]
             row = {
                 "Name": str(padded[name_index]).strip(),
@@ -153,13 +167,12 @@ class GoogleSheetsStore:
         if not values:
             _update_row(worksheet, 1, list(TRACKING_HEADERS))
             values = [list(TRACKING_HEADERS)]
-        headers = [str(value).strip() for value in values[0]]
-        name_index, roll_index = _roll_map_columns(headers)
+        header_row, headers, name_index, roll_index = _find_roll_map_header(values)
         name = name.strip()
         if not name:
             raise ValueError("A student name is required to save a roll number.")
         target_row = None
-        for row_number, values_row in enumerate(values[1:], start=2):
+        for row_number, values_row in enumerate(values[header_row + 1 :], start=header_row + 2):
             padded = [*values_row, *("" for _ in range(len(headers) - len(values_row)))]
             stored_name = _normalize_name(str(padded[name_index]))
             if stored_name == _normalize_name(name):

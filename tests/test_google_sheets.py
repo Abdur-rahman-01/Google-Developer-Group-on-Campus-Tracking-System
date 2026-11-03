@@ -129,12 +129,54 @@ class GoogleSheetsStoreTests(unittest.TestCase):
                 )
             }
         )
-
         self.assertEqual(
             store.read_roll_number_map(),
             [
                 {"Name": "Student One", "Roll Number": "123"},
                 {"Name": "Student Two", "Roll Number": "456"},
+            ],
+        )
+
+    def test_reads_roll_map_headers_after_title_row_and_with_invisible_prefix(self):
+        store, _ = self.make_store(
+            {
+                "rollno map": FakeWorksheet(
+                    [
+                        ["Curated student roster"],
+                        ["\ufeffName ", "Roll Number"],
+                        ["Student One", "123"],
+                    ],
+                    "rollno map",
+                )
+            }
+        )
+
+        self.assertEqual(
+            store.read_roll_number_map(),
+            [{"Name": "Student One", "Roll Number": "123"}],
+        )
+
+    def test_saves_roll_map_entry_below_title_and_header_rows(self):
+        worksheet = FakeWorksheet(
+            [
+                ["Curated student roster"],
+                ["Name", "Roll Number"],
+                ["Student One", "123"],
+            ],
+            "rollno map",
+        )
+        store, _ = self.make_store({"rollno map": worksheet})
+
+        store.save_student_mapping("Student One", "456")
+
+        self.assertEqual(
+            worksheet.updates,
+            [
+                {
+                    "range_name": "A3:B3",
+                    "values": [["Student One", "456"]],
+                    "value_input_option": "RAW",
+                }
             ],
         )
 
