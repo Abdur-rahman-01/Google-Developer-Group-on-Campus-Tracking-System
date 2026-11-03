@@ -132,6 +132,35 @@ class GoogleSheetsStore:
 
     def read_tracking_data(self) -> tuple[list[str], list[dict[str, str]]]:
         values = self._worksheet(self.tracking_tab).get_all_values()
+        return self._parse_tracking_data(values)
+
+    def read_tracking_and_roll_number_map(
+        self,
+    ) -> tuple[list[str], list[dict[str, str]], list[dict[str, str]]]:
+        tracking_worksheet = self._worksheet(self.tracking_tab)
+        roll_map_worksheet = self._worksheet(self.roll_map_tab, TRACKING_HEADERS)
+        tracking_range = (
+            "'" + tracking_worksheet.title.replace("'", "''") + "'!A:ZZ"
+        )
+        roll_map_range = "'" + roll_map_worksheet.title.replace("'", "''") + "'!A:ZZ"
+        response = self.spreadsheet.values_batch_get(
+            [tracking_range, roll_map_range]
+        )
+        value_ranges = response.get("valueRanges", [])
+        if len(value_ranges) != 2:
+            raise ValueError("Google Sheets returned an incomplete batch read.")
+        tracking_values = value_ranges[0].get("values", [])
+        roll_map_values = value_ranges[1].get("values", [])
+        headers, records = self._parse_tracking_data(tracking_values)
+        if not roll_map_values:
+            _update_row(roll_map_worksheet, 1, list(TRACKING_HEADERS))
+            return headers, records, []
+        return headers, records, self._parse_roll_number_map(roll_map_values)
+
+    def _parse_tracking_data(
+        self,
+        values: list[list[str]],
+    ) -> tuple[list[str], list[dict[str, str]]]:
         if not values or not any(str(value).strip() for value in values[0]):
             raise ValueError(
                 f'The "{self.tracking_tab}" tab must have a header row and participant data.'
@@ -159,6 +188,9 @@ class GoogleSheetsStore:
         if not values:
             _update_row(worksheet, 1, list(TRACKING_HEADERS))
             return []
+        return self._parse_roll_number_map(values)
+
+    def _parse_roll_number_map(self, values: list[list[str]]) -> list[dict[str, str]]:
         header_row, headers, name_index, roll_index, phone_index = _find_roll_map_header(values)
         rows = []
         seen_names: set[str] = set()

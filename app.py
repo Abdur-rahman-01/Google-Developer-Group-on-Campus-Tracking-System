@@ -13,7 +13,6 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import pandas as pd
-import plotly.express as px
 import streamlit as st
 from streamlit.errors import StreamlitSecretNotFoundError
 
@@ -42,19 +41,18 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
     :root {
       --blue:#4285f4; --green:#34a853; --yellow:#fbbc04; --red:#ea4335;
       --purple:#a142f4; --cyan:#24c1e0;
     }
-    html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
+    html, body, [class*="css"] { font-family: 'Segoe UI', sans-serif; }
     .stApp {
       background:
         radial-gradient(ellipse at 8% 8%, rgba(66,133,244,.10), transparent 30%),
         radial-gradient(ellipse at 92% 20%, rgba(161,66,244,.08), transparent 26%),
         radial-gradient(ellipse at 70% 88%, rgba(52,168,83,.07), transparent 30%);
     }
-    h1, h2, h3 { font-family: 'Space Grotesk', sans-serif; letter-spacing: -.025em; }
+    h1, h2, h3 { font-family: 'Segoe UI', sans-serif; letter-spacing: -.025em; }
     .block-container { max-width: 1440px; padding-top: 2rem; padding-bottom: 4rem; text-align: center; }
     .block-container h1, .block-container h2, .block-container h3, .block-container h4,
     .block-container p, .block-container [data-testid="stCaptionContainer"],
@@ -162,6 +160,19 @@ st.markdown(
     .resource-button.whatsapp:hover { background: #0e7540; }
     .resource-button svg { flex: 0 0 auto; width: 1.35rem; height: 1.35rem; fill: currentColor; }
     @media (max-width: 600px) {
+      .st-key-home_banner, .st-key-leaderboard_banner { padding: 18px; }
+      .st-key-home_banner [data-testid="stHorizontalBlock"],
+      .st-key-leaderboard_banner [data-testid="stHorizontalBlock"] { flex-wrap: wrap; }
+      .st-key-home_banner [data-testid="column"],
+      .st-key-leaderboard_banner [data-testid="column"] {
+        flex: 1 1 100% !important; width: 100% !important; min-width: 0;
+      }
+      .st-key-home_banner [data-testid="stImage"],
+      .st-key-leaderboard_banner [data-testid="stImage"] {
+        max-width: 112px; padding: 4px; border-radius: 16px;
+      }
+      .st-key-home_banner [data-testid="stImage"] img,
+      .st-key-leaderboard_banner [data-testid="stImage"] img { width: 104px; }
       .resource-button { flex-basis: 100%; max-width: none; }
     }
     </style>
@@ -200,8 +211,7 @@ def read_google_sheet_tabs(
         roll_map_tab,
         service_account_json,
     )
-    headers, records = store.read_tracking_data()
-    return headers, records, store.read_roll_number_map()
+    return store.read_tracking_and_roll_number_map()
 
 
 def google_sheets_configuration() -> tuple[str, str, str, dict] | None:
@@ -570,7 +580,7 @@ def render_student(student: dict) -> None:
 
 
 def render_home() -> None:
-    st.html(
+    st.iframe(
         """
         <style>
           :root { color-scheme: dark; }
@@ -633,7 +643,8 @@ def render_home() -> None:
           setInterval(updateCountdown, 1000);
         </script>
         """,
-        unsafe_allow_javascript=True,
+        height=180,
+        alt="Campaign countdown",
     )
     render_brand_banner(
         "home_banner",
@@ -1106,6 +1117,8 @@ def render_import_history() -> None:
     if snapshots:
         st.markdown("#### Progress across imports")
         snapshot_frame = pd.DataFrame(snapshots)
+        import plotly.express as px
+
         fig = px.line(
             snapshot_frame,
             x="Date",
@@ -1183,6 +1196,8 @@ def render_admin() -> None:
     stat_columns[4].metric("Average badges", f'{metrics["average"]:.1f}/10')
     students = tracker.get_all_students()
     if students:
+        import plotly.express as px
+
         counts = pd.Series([int(student["badges_count"]) for student in students])
         distribution = counts.value_counts().reindex(range(11), fill_value=0).sort_index()
         chart_left, chart_right = st.columns(2)
