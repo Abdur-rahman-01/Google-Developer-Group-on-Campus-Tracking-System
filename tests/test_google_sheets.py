@@ -26,6 +26,7 @@ class FakeWorksheet:
 class FakeSpreadsheet:
     def __init__(self, worksheets):
         self._worksheets = worksheets
+        self.batch_ranges = []
 
     def worksheet(self, title):
         if title not in self._worksheets:
@@ -39,6 +40,19 @@ class FakeSpreadsheet:
 
     def worksheets(self):
         return list(self._worksheets.values())
+
+    def values_batch_get(self, ranges):
+        self.batch_ranges = ranges
+        return {
+            "valueRanges": [
+                {
+                    "values": self._worksheets[
+                        sheet_range.split("!")[0].strip("'").replace("''", "'")
+                    ].values
+                }
+                for sheet_range in ranges
+            ]
+        }
 
 
 class GoogleSheetsStoreTests(unittest.TestCase):
@@ -75,6 +89,36 @@ class GoogleSheetsStoreTests(unittest.TestCase):
                     "Skill Badges Completed Count": "4",
                 }
             ],
+        )
+
+    def test_reads_tracking_and_roll_map_in_one_batch(self):
+        store, spreadsheet = self.make_store(
+            {
+                "Tracking Data": FakeWorksheet(
+                    [
+                        ["User Name", "User Email"],
+                        ["A Student", "a@example.com"],
+                    ],
+                    "Tracking Data",
+                ),
+                "rollno map": FakeWorksheet(
+                    [
+                        ["Name", "Roll Number"],
+                        ["A Student", "123"],
+                    ],
+                    "rollno map",
+                ),
+            }
+        )
+
+        headers, records, roll_map = store.read_tracking_and_roll_number_map()
+
+        self.assertEqual(headers, ["User Name", "User Email"])
+        self.assertEqual(records[0]["User Name"], "A Student")
+        self.assertEqual(roll_map[0]["Roll Number"], "123")
+        self.assertEqual(
+            spreadsheet.batch_ranges,
+            ["'Tracking Data'!A:ZZ", "'rollno map'!A:ZZ"],
         )
 
     def test_creates_roll_map_tab_with_required_header(self):
