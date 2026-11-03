@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import gspread
 
-from google_sheets import GoogleSheetsStore, TRACKING_HEADERS
+from google_sheets import GoogleSheetsStore, TRACKING_HEADERS, phone_number_for_student
 
 
 class FakeWorksheet:
@@ -178,6 +178,35 @@ class GoogleSheetsStoreTests(unittest.TestCase):
                     "Phone Number": "+966 54 815 2008",
                 }
             ],
+        )
+
+    def test_phone_number_lookup_prefers_roll_number_and_falls_back_to_name(self):
+        roll_map = [
+            {
+                "Name": "Original Name",
+                "Roll Number": "MCET-001",
+                "Phone Number": "1111111111",
+            },
+            {
+                "Name": "Renamed Student",
+                "Roll Number": "MCET-002",
+                "Phone Number": "2222222222",
+            },
+        ]
+
+        self.assertEqual(
+            phone_number_for_student(
+                {"name": "Student Name Updated", "roll_number": "mcet-002"},
+                roll_map,
+            ),
+            "2222222222",
+        )
+        self.assertEqual(
+            phone_number_for_student(
+                {"name": "  ORIGINAL   NAME ", "roll_number": ""},
+                roll_map,
+            ),
+            "1111111111",
         )
 
     def test_saves_roll_map_entry_below_title_and_header_rows(self):

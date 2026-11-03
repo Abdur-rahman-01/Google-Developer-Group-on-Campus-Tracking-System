@@ -17,7 +17,7 @@ import plotly.express as px
 import streamlit as st
 from streamlit.errors import StreamlitSecretNotFoundError
 
-from google_sheets import GoogleSheetsStore
+from google_sheets import GoogleSheetsStore, phone_number_for_student
 import tracker
 
 
@@ -890,6 +890,11 @@ def render_student_admin() -> None:
         "Student records",
         "Participant roster and roll numbers are synced from Tracking Data and rollno map.",
     )
+    if st.button("Refresh contact numbers from Google Sheets", key="refresh_admin_contacts"):
+        read_google_sheet_tabs.clear()
+        st.rerun()
+    contact_count = sum(bool(row.get("Phone Number")) for row in SHEET_ROLL_MAP)
+    st.caption(f"{contact_count} contact numbers loaded from rollno map.")
     search = st.text_input("Filter by name, email, or roll number")
     completion_filter = st.selectbox(
         "Progress status", ["All", "Not started", "In progress", "1–2 remaining", "Completed all 10"]
@@ -908,20 +913,15 @@ def render_student_admin() -> None:
         st.info("No student records found. Add participant rows to the Tracking Data sheet.")
         return
     st.caption(f"Showing {len(students)} of {total} matching records.")
-    phone_numbers_by_name = {
-        " ".join(row["Name"].casefold().split()): row.get("Phone Number", "")
-        for row in SHEET_ROLL_MAP
-        if row.get("Name")
-    }
     st.dataframe(
         pd.DataFrame(
             [
                 {
                     "Name": student["name"],
                     "Roll number": student.get("roll_number") or "",
-                    "Phone number (admin only)": phone_numbers_by_name.get(
-                        " ".join(student["name"].casefold().split()),
-                        "",
+                    "Phone number (admin only)": phone_number_for_student(
+                        student,
+                        SHEET_ROLL_MAP,
                     ),
                     "Email (admin only)": student.get("email") or "",
                     "Badges": f'{student["badges_count"]}/10',
@@ -951,10 +951,7 @@ def render_student_admin() -> None:
     }
     selected_label = st.selectbox("Select a student", list(options))
     selected = options[selected_label]
-    selected_phone = phone_numbers_by_name.get(
-        " ".join(selected["name"].casefold().split()),
-        "",
-    )
+    selected_phone = phone_number_for_student(selected, SHEET_ROLL_MAP)
     st.caption(
         f'Roll number: {selected.get("roll_number") or "Not assigned"} · '
         f'Phone number: {selected_phone or "Not provided"} · '

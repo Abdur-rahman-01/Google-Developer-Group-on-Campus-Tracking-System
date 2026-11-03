@@ -20,6 +20,27 @@ def _normalize_name(value: str) -> str:
     return " ".join(str(value).casefold().split())
 
 
+def phone_number_for_student(
+    student: dict[str, Any],
+    roll_map: list[dict[str, str]],
+) -> str:
+    student_roll = _normalize_name(str(student.get("roll_number") or ""))
+    student_name = _normalize_name(str(student.get("name") or ""))
+    for row in roll_map:
+        if not row.get("Phone Number"):
+            continue
+        if student_roll and _normalize_name(row.get("Roll Number", "")) == student_roll:
+            return row["Phone Number"]
+    for row in roll_map:
+        if (
+            student_name
+            and _normalize_name(row.get("Name", "")) == student_name
+            and row.get("Phone Number")
+        ):
+            return row["Phone Number"]
+    return ""
+
+
 def _roll_map_columns(headers: list[str]) -> tuple[int, int, int | None]:
     indexes = {_header_key(header): index for index, header in enumerate(headers)}
     name_index = next(

@@ -96,6 +96,10 @@ class AppTests(unittest.TestCase):
                     for item in app.dataframe
                 )
             )
+            self.assertIn(
+                "Refresh contact numbers from Google Sheets",
+                [button.label for button in app.button],
+            )
 
     def test_home_has_whatsapp_help_and_hides_outdated_update_section(self):
         app_path = Path(__file__).parent.parent / "app.py"
