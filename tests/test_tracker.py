@@ -195,10 +195,7 @@ class TrackerTests(unittest.TestCase):
         self.assertNotIn("email", profile)
         self.assertNotIn("access_code", profile)
         self.assertEqual(profile["skills_profile_url"], "https://skills.example/student-1")
-        self.assertEqual(
-            profile["developer_profile_url"],
-            "https://developers.example/student-1",
-        )
+        self.assertIsNone(profile["developer_profile_url"])
 
     def test_public_participants_are_paginated_and_hide_private_fields(self):
         rows = [
@@ -329,7 +326,7 @@ class TrackerTests(unittest.TestCase):
         )
         self.assertEqual(
             profile["developer_profile_url"],
-            "https://developers.google.com/profile/student",
+            None,
         )
         self.assertEqual(profile["access_code_status"], "Redeemed")
         self.assertEqual(profile["milestone"], "No Milestone")
@@ -346,17 +343,36 @@ class TrackerTests(unittest.TestCase):
                     "Milestone Completed": "No Milestone",
                     "Google Skills Profile Status": "Complete",
                     "Google Developer Profile Status": "Complete",
+                    "Google Developer Profile URL": "https://developers.google.com/profile/gear-student",
                     "Access Code Redemption Status": "Redeemed",
                 }
             )
         )
         self.assertTrue(profile["is_gear_participant"])
+        self.assertEqual(
+            profile["developer_profile_url"],
+            "https://developers.google.com/profile/gear-student",
+        )
         self.assertEqual(profile["gear_badges"], "No Badge")
         self.assertEqual(profile["developer_profile_status"], "Complete")
         self.assertEqual(profile["access_code_status"], "Redeemed")
         self.assertEqual(profile["badges_names"], [])
         self.assertNotIn("xp", profile)
         self.assertNotIn("access_code", profile)
+
+    def test_public_gear_profile_hides_developer_link_when_not_applicable(self):
+        _, profile = self.import_public_profile(
+            self.row(
+                **{
+                    "GEAR Digital Badges": "No Badge",
+                    "Google Developer Profile Status": "Not applicable",
+                    "Google Developer Profile URL": "https://developers.google.com/profile/student",
+                }
+            )
+        )
+
+        self.assertTrue(profile["is_gear_participant"])
+        self.assertIsNone(profile["developer_profile_url"])
 
     def test_duplicate_rows_and_invalid_counts_are_skipped(self):
         invalid = self.row(**{"Skill Badges Completed Count": "11"})

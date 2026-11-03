@@ -478,6 +478,15 @@ def skills_profile_id(profile_url: str | None) -> str | None:
     return path_segments[profile_index + 1] if profile_index + 1 < len(path_segments) else None
 
 
+def safe_profile_url(profile_url: str | None) -> str:
+    if not profile_url:
+        return ""
+    parsed_url = urlparse(profile_url)
+    if parsed_url.scheme != "https" or not parsed_url.netloc:
+        return ""
+    return profile_url
+
+
 def render_student(student: dict) -> None:
     with st.container(key="student_search_result"):
         st.subheader(student["name"])
@@ -489,12 +498,17 @@ def render_student(student: dict) -> None:
         )
         profile_links = [
             ("Google Skills profile", student.get("skills_profile_url")),
-            ("Google Developer profile", student.get("developer_profile_url")),
+            (
+                "Google Developer profile",
+                student.get("developer_profile_url")
+                if student.get("is_gear_participant")
+                else None,
+            ),
         ]
         available_links = [
             (label, url)
             for label, url in profile_links
-            if url and urlparse(url).scheme == "https" and urlparse(url).netloc
+            if safe_profile_url(url)
         ]
         if available_links:
             link_columns = st.columns(len(available_links))
@@ -928,13 +942,28 @@ def render_student_admin() -> None:
                     "Achievement status": "Complete" if student["badges_count"] == 10 else "In progress",
                     "XP": student["xp"],
                     "Public profile": "Public" if student["public_visible"] else "Not in tracking sheet",
-                    "Last updated": student["updated_at"],
+                    "Google Skills Boost profile": safe_profile_url(
+                        student.get("skills_profile_url")
+                    ),
+                    "Google Developer profile": safe_profile_url(
+                        student.get("developer_profile_url")
+                    ),
                 }
                 for student in students
             ]
         ),
         width="stretch",
         hide_index=True,
+        column_config={
+            "Google Skills Boost profile": st.column_config.LinkColumn(
+                "Google Skills Boost profile",
+                display_text="Open profile",
+            ),
+            "Google Developer profile": st.column_config.LinkColumn(
+                "Google Developer profile",
+                display_text="Open profile",
+            ),
+        },
     )
     st.download_button(
         "Export filtered records (admin only)",

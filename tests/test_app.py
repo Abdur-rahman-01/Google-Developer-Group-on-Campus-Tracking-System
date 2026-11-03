@@ -55,6 +55,8 @@ class AppTests(unittest.TestCase):
             "public_visible": True,
             "email": "student@example.edu",
             "xp": 150,
+            "skills_profile_url": "https://skills.google/profile/admin-student",
+            "developer_profile_url": "https://developers.google.com/profile/admin-student",
         }
         metrics = {
             "students": 1,
@@ -95,6 +97,22 @@ class AppTests(unittest.TestCase):
                     "Phone number (admin only)" in item.value.columns
                     for item in app.dataframe
                 )
+            )
+            admin_students_frame = next(
+                item.value
+                for item in app.dataframe
+                if "Phone number (admin only)" in item.value.columns
+            )
+            self.assertIn("Google Skills Boost profile", admin_students_frame.columns)
+            self.assertIn("Google Developer profile", admin_students_frame.columns)
+            self.assertNotIn("Last updated", admin_students_frame.columns)
+            self.assertEqual(
+                admin_students_frame.iloc[0]["Google Skills Boost profile"],
+                "https://skills.google/profile/admin-student",
+            )
+            self.assertEqual(
+                admin_students_frame.iloc[0]["Google Developer profile"],
+                "https://developers.google.com/profile/admin-student",
             )
             self.assertIn(
                 "Refresh contact numbers from Google Sheets",
@@ -220,6 +238,10 @@ class AppTests(unittest.TestCase):
             self.assertIn(
                 "Google Skills Boost profile ID: boost-student-id",
                 "\n".join(item.value for item in app.caption),
+            )
+            self.assertNotIn(
+                "Google Developer profile",
+                [button.label for button in app.button],
             )
             metric_labels = {item.label for item in app.metric}
             self.assertIn("Google Skills profile status", metric_labels)

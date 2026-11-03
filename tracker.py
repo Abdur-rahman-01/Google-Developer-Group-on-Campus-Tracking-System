@@ -766,7 +766,13 @@ def get_student_profile(student_id: int, public_only: bool = True, db_path: str 
                 "badges_count": student["badges_count"],
                 "badges_names": json.loads(student["badges_names"] or "[]"),
                 "skills_profile_url": student["skills_profile_url"],
-                "developer_profile_url": student["developer_profile_url"],
+                "developer_profile_url": (
+                    student["developer_profile_url"]
+                    if is_gear
+                    and str(student.get("developer_profile_status") or "").strip().casefold()
+                    not in {"not applicable", "n/a", "na"}
+                    else None
+                ),
                 "access_code_status": student["access_code_status"],
                 "milestone": student["milestone"],
                 "gear_badges": student["gear_badges"],
