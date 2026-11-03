@@ -570,6 +570,71 @@ def render_student(student: dict) -> None:
 
 
 def render_home() -> None:
+    st.html(
+        """
+        <style>
+          :root { color-scheme: dark; }
+          .countdown {
+            box-sizing: border-box; width: 100%; padding: 18px 24px; border-radius: 22px;
+            border: 1px solid rgba(138,180,248,.42);
+            background: linear-gradient(120deg, #101722, #172238 58%, #252044);
+            box-shadow: 0 12px 32px rgba(0,0,0,.18); color: #fff; text-align: center;
+            font-family: Arial, sans-serif;
+          }
+          .countdown-title {
+            margin: 0 0 12px; color: #a9ccff; font-size: .78rem;
+            font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+          }
+          .countdown-units {
+            display: flex; justify-content: center; gap: clamp(10px, 3vw, 30px);
+          }
+          .countdown-unit { min-width: 58px; }
+          .countdown-value { font-size: clamp(1.7rem, 5vw, 2.5rem); font-weight: 700; }
+          .countdown-label {
+            color: rgba(255,255,255,.72); font-size: .7rem;
+            letter-spacing: .09em; text-transform: uppercase;
+          }
+          .countdown-deadline { margin: 12px 0 0; color: rgba(255,255,255,.78); font-size: .85rem; }
+          @media (max-width: 420px) {
+            .countdown { padding: 16px 10px; }
+            .countdown-units { gap: 8px; }
+            .countdown-unit { min-width: 52px; }
+          }
+        </style>
+        <section class="countdown" aria-label="Campaign countdown">
+          <h2 class="countdown-title">Time remaining to complete the campaign</h2>
+          <div class="countdown-units" id="countdown" role="timer">
+            <div class="countdown-unit"><div class="countdown-value" id="days">--</div><div class="countdown-label">Days</div></div>
+            <div class="countdown-unit"><div class="countdown-value" id="hours">--</div><div class="countdown-label">Hours</div></div>
+            <div class="countdown-unit"><div class="countdown-value" id="minutes">--</div><div class="countdown-label">Minutes</div></div>
+            <div class="countdown-unit"><div class="countdown-value" id="seconds">--</div><div class="countdown-label">Seconds</div></div>
+          </div>
+          <p class="countdown-deadline">Deadline: November 23, 2026 at 11:59 PM (your local time)</p>
+        </section>
+        <script>
+          const deadline = new Date(2026, 10, 23, 23, 59, 0).getTime();
+          const updateCountdown = () => {
+            const remaining = deadline - Date.now();
+            if (remaining <= 0) {
+              document.getElementById("countdown").innerHTML =
+                '<div class="countdown-value">Campaign complete</div>';
+              return;
+            }
+            const days = Math.floor(remaining / 86400000);
+            const hours = Math.floor((remaining % 86400000) / 3600000);
+            const minutes = Math.floor((remaining % 3600000) / 60000);
+            const seconds = Math.floor((remaining % 60000) / 1000);
+            document.getElementById("days").textContent = days;
+            document.getElementById("hours").textContent = String(hours).padStart(2, "0");
+            document.getElementById("minutes").textContent = String(minutes).padStart(2, "0");
+            document.getElementById("seconds").textContent = String(seconds).padStart(2, "0");
+          };
+          updateCountdown();
+          setInterval(updateCountdown, 1000);
+        </script>
+        """,
+        unsafe_allow_javascript=True,
+    )
     render_brand_banner(
         "home_banner",
         "GDG on Campus · MCET",
