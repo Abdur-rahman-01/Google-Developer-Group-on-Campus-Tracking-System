@@ -768,20 +768,12 @@ def get_student_profile(student_id: int, public_only: bool = True, db_path: str 
                 "skills_profile_url": student["skills_profile_url"],
                 "developer_profile_url": student["developer_profile_url"],
                 "access_code_status": student["access_code_status"],
+                "milestone": student["milestone"],
+                "gear_badges": student["gear_badges"],
+                "skills_profile_status": student["skills_profile_status"],
+                "developer_profile_status": student["developer_profile_status"],
                 "is_gear_participant": is_gear,
             }
-            if is_gear:
-                profile.update(
-                    {
-                        field: student[field]
-                        for field in (
-                            "milestone",
-                            "gear_badges",
-                            "skills_profile_status",
-                            "developer_profile_status",
-                        )
-                    }
-                )
             return profile
         student["badges_names"] = json.loads(student["badges_names"] or "[]")
         student["xp"] = int(connection.execute(

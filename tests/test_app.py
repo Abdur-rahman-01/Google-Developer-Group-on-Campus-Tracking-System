@@ -135,6 +135,14 @@ class AppTests(unittest.TestCase):
             "badges_names": [],
             "access_code_status": "Not reported",
             "is_gear_participant": False,
+            "skills_profile_url": (
+                "https://www.cloudskillsboost.google/public_profiles/boost-student-id"
+            ),
+            "developer_profile_url": "https://developers.google.com/profile/student",
+            "skills_profile_status": "Complete",
+            "developer_profile_status": "In progress",
+            "gear_badges": "Not applicable",
+            "milestone": "Not applicable",
         }
         with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
             os.environ,
@@ -150,6 +158,14 @@ class AppTests(unittest.TestCase):
                 any("You haven't started your skill badges yet" in item.value for item in app.info)
             )
             self.assertIn("#### Your learning resources", markdown)
+            self.assertIn("#### GEAR and profile status", markdown)
+            self.assertIn(
+                "Google Skills Boost profile ID: boost-student-id",
+                "\n".join(item.value for item in app.caption),
+            )
+            metric_labels = {item.label for item in app.metric}
+            self.assertIn("Google Skills profile status", metric_labels)
+            self.assertIn("Google Developer profile status", metric_labels)
             self.assertEqual(markdown.count(">Step 1: Claim the credits</a>"), 2)
 
 

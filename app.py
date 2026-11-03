@@ -457,10 +457,29 @@ def render_resource_buttons() -> None:
     )
 
 
+def skills_profile_id(profile_url: str | None) -> str | None:
+    if not profile_url:
+        return None
+    parsed_url = urlparse(profile_url)
+    if parsed_url.scheme != "https" or not parsed_url.netloc:
+        return None
+    path_segments = [segment for segment in parsed_url.path.split("/") if segment]
+    try:
+        profile_index = path_segments.index("public_profiles")
+    except ValueError:
+        return None
+    return path_segments[profile_index + 1] if profile_index + 1 < len(path_segments) else None
+
+
 def render_student(student: dict) -> None:
     with st.container(key="student_search_result"):
         st.subheader(student["name"])
         st.caption(f"Roll number: {student.get('roll_number') or 'Not assigned'}")
+        boost_profile_id = skills_profile_id(student.get("skills_profile_url"))
+        st.caption(
+            "Google Skills Boost profile ID: "
+            f"{boost_profile_id or 'Not available in profile link'}"
+        )
         profile_links = [
             ("Google Skills profile", student.get("skills_profile_url")),
             ("Google Developer profile", student.get("developer_profile_url")),
@@ -516,18 +535,17 @@ def render_student(student: dict) -> None:
         if count < 10:
             st.markdown("#### Your learning resources")
             render_resource_buttons()
-        if student.get("is_gear_participant"):
-            st.markdown("#### GEAR program")
-            details = [
-                ("GEAR digital badges", student.get("gear_badges")),
-                ("Milestone", student.get("milestone")),
-                ("Google Skills profile", student.get("skills_profile_status")),
-                ("Google Developer profile", student.get("developer_profile_status")),
-            ]
-            for start in range(0, len(details), 3):
-                columns = st.columns(3)
-                for column, (label, value) in zip(columns, details[start : start + 3]):
-                    column.metric(label, value or "Not reported")
+        st.markdown("#### GEAR and profile status")
+        details = [
+            ("GEAR digital badges", student.get("gear_badges")),
+            ("Milestone", student.get("milestone")),
+            ("Google Skills profile status", student.get("skills_profile_status")),
+            ("Google Developer profile status", student.get("developer_profile_status")),
+        ]
+        for start in range(0, len(details), 2):
+            columns = st.columns(2)
+            for column, (label, value) in zip(columns, details[start : start + 2]):
+                column.metric(label, value or "Not reported")
 
 
 def render_home() -> None:

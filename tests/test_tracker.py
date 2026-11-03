@@ -283,7 +283,7 @@ class TrackerTests(unittest.TestCase):
         student = tracker.get_admin_students(db_path=self.db_path)[0]
         self.assertTrue(student["public_visible"])
 
-    def test_public_search_shows_badges_and_access_status_but_hides_non_gear_details(self):
+    def test_public_search_shows_selected_details_for_all_participants(self):
         search_result, profile = self.import_public_profile(
             self.row(
                 **{
@@ -314,6 +314,10 @@ class TrackerTests(unittest.TestCase):
                 "skills_profile_url",
                 "developer_profile_url",
                 "access_code_status",
+                "milestone",
+                "gear_badges",
+                "skills_profile_status",
+                "developer_profile_status",
                 "is_gear_participant",
             },
         )
@@ -328,8 +332,10 @@ class TrackerTests(unittest.TestCase):
             "https://developers.google.com/profile/student",
         )
         self.assertEqual(profile["access_code_status"], "Redeemed")
-        self.assertNotIn("gear_badges", profile)
-        self.assertNotIn("developer_profile_status", profile)
+        self.assertEqual(profile["milestone"], "No Milestone")
+        self.assertEqual(profile["gear_badges"], "Not applicable")
+        self.assertEqual(profile["skills_profile_status"], "Complete")
+        self.assertEqual(profile["developer_profile_status"], "Complete")
         self.assertNotIn("access_code", profile)
 
     def test_public_gear_profile_includes_program_status_but_not_xp(self):
