@@ -32,7 +32,7 @@ The local database is created at `data/gdg_tracker.db`. Set `GDG_DB_PATH` to cho
 
 ## Student privacy
 
-Every participant in **Tracking Data** is public on the Home participant list and leaderboard. The participant list shows names only and can be filtered by name or roll number. Searching for a participant shows their roll number, Google Skills Boost profile ID when present in its URL, both profile links, badge count and names, access-code redemption status, GEAR badges and milestone, and Google Skills/Developer completion statuses. Student emails, raw access codes, XP, and platform levels are never displayed. Keep the spreadsheet private, and only include students who should have these details published. Incomplete profiles show learning links and a WhatsApp help button; completed profiles celebrate all 10 skill badges. Use HTTPS for any public deployment.
+Every participant in **Tracking Data** is public on the Home participant list and leaderboard. The participant list shows names only and can be filtered by name or roll number. Searching for a participant shows their roll number, Google Skills Boost profile ID when present in its URL, both profile links, badge count and names, access-code redemption status, GEAR badges and milestone, and Google Skills/Developer completion statuses. Student emails, phone numbers, raw access codes, XP, and platform levels are never displayed publicly. Optional phone numbers in **rollno map** are shown only in the password-protected Admin Students view. Keep the spreadsheet private, and only include participant details that should be available to the app administrators. Incomplete profiles show learning links and a WhatsApp help button; completed profiles celebrate all 10 skill badges. Use HTTPS for any public deployment.
 
 ## Google Sheets synchronization rules
 
@@ -51,8 +51,8 @@ Keep Streamlit Community Cloud and use a private Google spreadsheet as the durab
 ### Prepare the spreadsheet
 
 1. Create a private Google spreadsheet with a **Tracking Data** tab. Paste the latest Google tracking export there, including its header row. The app detects supported column names automatically; the tab must contain a student name plus an email or Google Skills profile URL.
-2. Keep the curated **rollno map** tab with columns `Name` and `Roll Number`. The app recognizes common header variants such as `Student Name` and `Roll No`. The tab is kept separate so replacing the tracking export does not remove curated roll numbers.
-3. Copy the curated name/roll-number pairs into **rollno map** once. Later tracking exports do not need roll numbers; update the map directly when assigning or correcting them.
+2. Keep the curated **rollno map** tab with columns `Name` and `Roll Number`. Add an optional `Phone Number` column for administrator-only contact details. The app recognizes common header variants such as `Student Name`, `Roll No`, and `Contact Number`. Format the phone column as plain text in Google Sheets so leading zeros and `+` prefixes are preserved. The tab is kept separate so replacing the tracking export does not remove curated roll numbers or contact details.
+3. Copy the curated name/roll-number pairs into **rollno map** once. Add phone numbers to the corresponding rows in the optional phone column; names should match the `Name` column for linking. Later tracking exports do not need roll numbers or phone numbers; update the map directly when assigning or correcting them.
 
 ### Connect Streamlit to Sheets
 

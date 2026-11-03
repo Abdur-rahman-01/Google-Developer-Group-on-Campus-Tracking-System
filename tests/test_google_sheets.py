@@ -132,8 +132,8 @@ class GoogleSheetsStoreTests(unittest.TestCase):
         self.assertEqual(
             store.read_roll_number_map(),
             [
-                {"Name": "Student One", "Roll Number": "123"},
-                {"Name": "Student Two", "Roll Number": "456"},
+                {"Name": "Student One", "Roll Number": "123", "Phone Number": ""},
+                {"Name": "Student Two", "Roll Number": "456", "Phone Number": ""},
             ],
         )
 
@@ -153,7 +153,31 @@ class GoogleSheetsStoreTests(unittest.TestCase):
 
         self.assertEqual(
             store.read_roll_number_map(),
-            [{"Name": "Student One", "Roll Number": "123"}],
+            [{"Name": "Student One", "Roll Number": "123", "Phone Number": ""}],
+        )
+
+    def test_reads_phone_numbers_as_text_from_optional_roll_map_column(self):
+        store, _ = self.make_store(
+            {
+                "rollno map": FakeWorksheet(
+                    [
+                        ["Name", "Roll Number", "Phone Number"],
+                        ["Student One", "00123", "+966 54 815 2008"],
+                    ],
+                    "rollno map",
+                )
+            }
+        )
+
+        self.assertEqual(
+            store.read_roll_number_map(),
+            [
+                {
+                    "Name": "Student One",
+                    "Roll Number": "00123",
+                    "Phone Number": "+966 54 815 2008",
+                }
+            ],
         )
 
     def test_saves_roll_map_entry_below_title_and_header_rows(self):

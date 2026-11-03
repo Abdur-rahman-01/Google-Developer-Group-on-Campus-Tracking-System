@@ -90,6 +90,12 @@ class AppTests(unittest.TestCase):
             self.assertTrue(
                 any("MCET-001" in str(frame) for frame in (item.value for item in app.dataframe))
             )
+            self.assertTrue(
+                any(
+                    "Phone number (admin only)" in item.value.columns
+                    for item in app.dataframe
+                )
+            )
 
     def test_home_has_whatsapp_help_and_hides_outdated_update_section(self):
         app_path = Path(__file__).parent.parent / "app.py"

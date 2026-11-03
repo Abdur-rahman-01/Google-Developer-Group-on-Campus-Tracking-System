@@ -217,7 +217,12 @@ def google_sheets_configuration() -> tuple[str, str, str, dict] | None:
     return spreadsheet_id, tracking_tab, roll_map_tab, service_account
 
 
+SHEET_ROLL_MAP: list[dict[str, str]] = []
+
+
 def synchronize_google_sheet() -> tuple[GoogleSheetsStore | None, str | None]:
+    global SHEET_ROLL_MAP
+
     configuration = google_sheets_configuration()
     if configuration is None:
         return None, None
@@ -229,6 +234,7 @@ def synchronize_google_sheet() -> tuple[GoogleSheetsStore | None, str | None]:
         roll_map_tab,
         credentials_json,
     )
+    SHEET_ROLL_MAP = roll_map
     source_digest = hashlib.sha256(
         json.dumps([headers, records], ensure_ascii=False, sort_keys=True).encode("utf-8")
     ).hexdigest()
@@ -902,12 +908,21 @@ def render_student_admin() -> None:
         st.info("No student records found. Add participant rows to the Tracking Data sheet.")
         return
     st.caption(f"Showing {len(students)} of {total} matching records.")
+    phone_numbers_by_name = {
+        " ".join(row["Name"].casefold().split()): row.get("Phone Number", "")
+        for row in SHEET_ROLL_MAP
+        if row.get("Name")
+    }
     st.dataframe(
         pd.DataFrame(
             [
                 {
                     "Name": student["name"],
                     "Roll number": student.get("roll_number") or "",
+                    "Phone number (admin only)": phone_numbers_by_name.get(
+                        " ".join(student["name"].casefold().split()),
+                        "",
+                    ),
                     "Email (admin only)": student.get("email") or "",
                     "Badges": f'{student["badges_count"]}/10',
                     "Achievement status": "Complete" if student["badges_count"] == 10 else "In progress",
@@ -936,9 +951,14 @@ def render_student_admin() -> None:
     }
     selected_label = st.selectbox("Select a student", list(options))
     selected = options[selected_label]
+    selected_phone = phone_numbers_by_name.get(
+        " ".join(selected["name"].casefold().split()),
+        "",
+    )
     st.caption(
         f'Roll number: {selected.get("roll_number") or "Not assigned"} · '
-        "Public visibility follows membership in Tracking Data. Edit roll numbers in the rollno map tab."
+        f'Phone number: {selected_phone or "Not provided"} · '
+        "Public visibility follows membership in Tracking Data. Manage roll numbers and phone numbers in the rollno map tab."
     )
     transactions = tracker.get_xp_transactions(selected["id"])
     if transactions:

@@ -20,7 +20,7 @@ def _normalize_name(value: str) -> str:
     return " ".join(str(value).casefold().split())
 
 
-def _roll_map_columns(headers: list[str]) -> tuple[int, int]:
+def _roll_map_columns(headers: list[str]) -> tuple[int, int, int | None]:
     indexes = {_header_key(header): index for index, header in enumerate(headers)}
     name_index = next(
         (
@@ -38,21 +38,31 @@ def _roll_map_columns(headers: list[str]) -> tuple[int, int]:
         ),
         None,
     )
+    phone_index = next(
+        (
+            indexes[key]
+            for key in ("phonenumber", "phone", "contactnumber", "mobilenumber", "mobile")
+            if key in indexes
+        ),
+        None,
+    )
     if name_index is None or roll_index is None:
         raise ValueError(
             'The roll-number map needs "Name" and "Roll Number" columns.'
         )
-    return name_index, roll_index
+    return name_index, roll_index, phone_index
 
 
-def _find_roll_map_header(values: list[list[str]]) -> tuple[int, list[str], int, int]:
+def _find_roll_map_header(
+    values: list[list[str]],
+) -> tuple[int, list[str], int, int, int | None]:
     for row_index, row in enumerate(values[:10]):
         headers = [str(value).strip() for value in row]
         try:
-            name_index, roll_index = _roll_map_columns(headers)
+            name_index, roll_index, phone_index = _roll_map_columns(headers)
         except ValueError:
             continue
-        return row_index, headers, name_index, roll_index
+        return row_index, headers, name_index, roll_index, phone_index
     raise ValueError(
         'Could not find "Name" and "Roll Number" columns in the first 10 rows '
         "of the roll-number map tab. Check the configured tab name and header row."
@@ -128,7 +138,7 @@ class GoogleSheetsStore:
         if not values:
             _update_row(worksheet, 1, list(TRACKING_HEADERS))
             return []
-        header_row, headers, name_index, roll_index = _find_roll_map_header(values)
+        header_row, headers, name_index, roll_index, phone_index = _find_roll_map_header(values)
         rows = []
         seen_names: set[str] = set()
         seen_roll_numbers: set[str] = set()
@@ -137,6 +147,11 @@ class GoogleSheetsStore:
             row = {
                 "Name": str(padded[name_index]).strip(),
                 "Roll Number": str(padded[roll_index]).strip(),
+                "Phone Number": (
+                    str(padded[phone_index]).strip()
+                    if phone_index is not None
+                    else ""
+                ),
             }
             if row["Name"]:
                 normalized_name = _normalize_name(row["Name"])
@@ -167,7 +182,7 @@ class GoogleSheetsStore:
         if not values:
             _update_row(worksheet, 1, list(TRACKING_HEADERS))
             values = [list(TRACKING_HEADERS)]
-        header_row, headers, name_index, roll_index = _find_roll_map_header(values)
+        header_row, headers, name_index, roll_index, _ = _find_roll_map_header(values)
         name = name.strip()
         if not name:
             raise ValueError("A student name is required to save a roll number.")
