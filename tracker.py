@@ -747,6 +747,7 @@ def get_student_profile(student_id: int, public_only: bool = True, db_path: str 
         row = connection.execute(
             f"""
             SELECT id, roll_number, name, badges_count, badges_names, updated_at, public_visible,
+                   skills_profile_url, developer_profile_url,
                    milestone, gear_badges, skills_profile_status, developer_profile_status,
                    access_code_status
             FROM students WHERE id = ? {visibility_filter}
@@ -764,6 +765,8 @@ def get_student_profile(student_id: int, public_only: bool = True, db_path: str 
                 "name": student["name"],
                 "badges_count": student["badges_count"],
                 "badges_names": json.loads(student["badges_names"] or "[]"),
+                "skills_profile_url": student["skills_profile_url"],
+                "developer_profile_url": student["developer_profile_url"],
                 "access_code_status": student["access_code_status"],
                 "is_gear_participant": is_gear,
             }
@@ -835,6 +838,7 @@ def get_leaderboard(
     )
     sql = f"""
         SELECT s.id, s.name, s.roll_number, s.badges_count, s.badges_names,
+               s.skills_profile_url, s.developer_profile_url,
                COALESCE(SUM(x.amount), 0) AS xp
         FROM students s
         LEFT JOIN xp_transactions x ON x.student_id = s.id
@@ -868,7 +872,8 @@ def get_public_participants(
     with get_connection(db_path) as connection:
         rows = connection.execute(
             """
-            SELECT id, name, roll_number, badges_count
+            SELECT id, name, roll_number, badges_count,
+                   skills_profile_url, developer_profile_url
             FROM students
             WHERE public_visible = 1
               AND (? = '' OR name LIKE ? COLLATE NOCASE OR roll_number LIKE ? COLLATE NOCASE)

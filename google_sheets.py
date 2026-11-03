@@ -6,11 +6,42 @@ import gspread
 
 
 TRACKING_HEADERS = (
-    "User Email",
-    "Google Skills Profile URL",
+    "Name",
     "Roll Number",
-    "Public Visible",
 )
+
+
+def _header_key(value: str) -> str:
+    return "".join(str(value).casefold().split()).replace("rollno", "rollnumber")
+
+
+def _normalize_name(value: str) -> str:
+    return " ".join(str(value).casefold().split())
+
+
+def _roll_map_columns(headers: list[str]) -> tuple[int, int]:
+    indexes = {_header_key(header): index for index, header in enumerate(headers)}
+    name_index = next(
+        (
+            indexes[key]
+            for key in ("name", "studentname", "username")
+            if key in indexes
+        ),
+        None,
+    )
+    roll_index = next(
+        (
+            indexes[key]
+            for key in ("rollnumber", "rollno", "roll")
+            if key in indexes
+        ),
+        None,
+    )
+    if name_index is None or roll_index is None:
+        raise ValueError(
+            'The roll-number map needs "Name" and "Roll Number" columns.'
+        )
+    return name_index, roll_index
 
 
 def _update_row(worksheet, row_number: int, values: list[str]) -> None:
@@ -28,7 +59,7 @@ class GoogleSheetsStore:
         spreadsheet_id: str,
         service_account_info: dict[str, Any],
         tracking_tab: str = "Tracking Data",
-        roll_map_tab: str = "Roll Number Map",
+        roll_map_tab: str = "rollno map",
     ) -> None:
         client = gspread.service_account_from_dict(service_account_info)
         self.spreadsheet = client.open_by_key(spreadsheet_id)
@@ -39,6 +70,10 @@ class GoogleSheetsStore:
         try:
             return self.spreadsheet.worksheet(title)
         except gspread.WorksheetNotFound:
+            requested_key = _header_key(title)
+            for worksheet in self.spreadsheet.worksheets():
+                if _header_key(worksheet.title) == requested_key:
+                    return worksheet
             if headers is None:
                 raise
             worksheet = self.spreadsheet.add_worksheet(
@@ -79,42 +114,39 @@ class GoogleSheetsStore:
             _update_row(worksheet, 1, list(TRACKING_HEADERS))
             return []
         headers = [str(value).strip() for value in values[0]]
-        normalized = {header.casefold(): index for index, header in enumerate(headers)}
-        required = {header.casefold() for header in TRACKING_HEADERS}
-        missing = required - normalized.keys()
-        if missing:
-            raise ValueError(
-                f'The "{self.roll_map_tab}" tab is missing required columns: '
-                f'{", ".join(sorted(missing))}.'
-            )
+        name_index, roll_index = _roll_map_columns(headers)
         rows = []
-        seen_identities: set[str] = set()
+        seen_names: set[str] = set()
+        seen_roll_numbers: set[str] = set()
         for values_row in values[1:]:
             padded = [*values_row, *("" for _ in range(len(headers) - len(values_row)))]
             row = {
-                header: str(padded[normalized[header.casefold()]]).strip()
-                for header in TRACKING_HEADERS
+                "Name": str(padded[name_index]).strip(),
+                "Roll Number": str(padded[roll_index]).strip(),
             }
-            if row["User Email"] or row["Google Skills Profile URL"]:
-                identities = {
-                    value.casefold()
-                    for value in (row["User Email"], row["Google Skills Profile URL"])
-                    if value
-                }
-                if seen_identities.intersection(identities):
+            if row["Name"]:
+                normalized_name = _normalize_name(row["Name"])
+                if normalized_name in seen_names:
                     raise ValueError(
-                        f'The "{self.roll_map_tab}" tab contains a duplicate student identity.'
+                        f'The "{self.roll_map_tab}" tab contains a duplicate student name: '
+                        f'{row["Name"]}.'
                     )
-                seen_identities.update(identities)
+                seen_names.add(normalized_name)
+                roll_number = row["Roll Number"].casefold()
+                if roll_number and roll_number in seen_roll_numbers:
+                    raise ValueError(
+                        f'The "{self.roll_map_tab}" tab contains a duplicate roll number: '
+                        f'{row["Roll Number"]}.'
+                    )
+                if roll_number:
+                    seen_roll_numbers.add(roll_number)
                 rows.append(row)
         return rows
 
     def save_student_mapping(
         self,
-        email: str,
-        skills_profile_url: str,
+        name: str,
         roll_number: str,
-        public_visible: bool,
     ) -> None:
         worksheet = self._worksheet(self.roll_map_tab, TRACKING_HEADERS)
         values = worksheet.get_all_values()
@@ -122,38 +154,22 @@ class GoogleSheetsStore:
             _update_row(worksheet, 1, list(TRACKING_HEADERS))
             values = [list(TRACKING_HEADERS)]
         headers = [str(value).strip() for value in values[0]]
-        indexes = {header.casefold(): index for index, header in enumerate(headers)}
-        required = {header.casefold() for header in TRACKING_HEADERS}
-        missing = required - indexes.keys()
-        if missing:
-            raise ValueError(
-                f'The "{self.roll_map_tab}" tab is missing required columns: '
-                f'{", ".join(sorted(missing))}.'
-            )
-        email = email.strip()
-        skills_profile_url = skills_profile_url.strip()
+        name_index, roll_index = _roll_map_columns(headers)
+        name = name.strip()
+        if not name:
+            raise ValueError("A student name is required to save a roll number.")
         target_row = None
         for row_number, values_row in enumerate(values[1:], start=2):
             padded = [*values_row, *("" for _ in range(len(headers) - len(values_row)))]
-            stored_email = str(padded[indexes["user email"]]).strip().casefold()
-            stored_profile = str(
-                padded[indexes["google skills profile url"]]
-            ).strip().casefold()
-            if (
-                (email and stored_email == email.casefold())
-                or (
-                    skills_profile_url
-                    and stored_profile == skills_profile_url.casefold()
-                )
-            ):
+            stored_name = _normalize_name(str(padded[name_index]))
+            if stored_name == _normalize_name(name):
                 target_row = row_number
                 break
 
-        row = [""] * len(headers)
-        row[indexes["user email"]] = email
-        row[indexes["google skills profile url"]] = skills_profile_url
-        row[indexes["roll number"]] = roll_number.strip()
-        row[indexes["public visible"]] = "TRUE" if public_visible else "FALSE"
+        row = list(values[target_row - 1]) if target_row else [""] * len(headers)
+        row.extend("" for _ in range(len(headers) - len(row)))
+        row[name_index] = name
+        row[roll_index] = roll_number.strip()
         if target_row is None:
             worksheet.append_row(row, value_input_option="RAW")
         else:

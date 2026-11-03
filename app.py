@@ -10,6 +10,7 @@ import os
 import sqlite3
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pandas as pd
 import plotly.express as px
@@ -207,7 +208,7 @@ def google_sheets_configuration() -> tuple[str, str, str, dict] | None:
         spreadsheet_id = str(st.secrets.get("SPREADSHEET_ID", "")).strip()
         service_account = dict(st.secrets.get("google_service_account", {}))
         tracking_tab = str(st.secrets.get("TRACKING_SHEET_TAB", "Tracking Data")).strip()
-        roll_map_tab = str(st.secrets.get("ROLL_NUMBER_MAP_TAB", "Roll Number Map")).strip()
+        roll_map_tab = str(st.secrets.get("ROLL_NUMBER_MAP_TAB", "rollno map")).strip()
     except StreamlitSecretNotFoundError:
         return None
     if not spreadsheet_id or not service_account:
@@ -230,57 +231,61 @@ def synchronize_google_sheet() -> tuple[GoogleSheetsStore | None, str | None]:
     source_digest = hashlib.sha256(
         json.dumps([headers, records], ensure_ascii=False, sort_keys=True).encode("utf-8")
     ).hexdigest()
+    mapping = tracker.default_mapping(headers)
+    if "name" not in mapping or not {
+        "email",
+        "skills_profile_url",
+    }.intersection(mapping):
+        raise ValueError(
+            f'The "{tracking_tab}" tab must include a student name and email '
+            "or Google Skills profile URL column."
+        )
     if tracker.get_app_setting("google_sheet_source_digest") != source_digest:
         content = io.StringIO(newline="")
         writer = csv.DictWriter(content, fieldnames=headers)
         writer.writeheader()
         writer.writerows(records)
         csv_content = content.getvalue().encode("utf-8")
-        mapping = tracker.default_mapping(headers)
-        if "name" not in mapping or not {
-            "email",
-            "skills_profile_url",
-        }.intersection(mapping):
-            raise ValueError(
-                f'The "{tracking_tab}" tab must include a student name and email '
-                "or Google Skills profile URL column."
-            )
         preview = tracker.preview_import(csv_content, mapping)
         tracker.import_records(
             preview["records"],
             f"Google Sheets · {tracking_tab}",
             preview["errors"],
             authoritative=True,
+            approve_new_students=True,
         )
         tracker.set_app_setting("google_sheet_source_digest", source_digest)
 
+    def normalized_name(value: str) -> str:
+        return " ".join(value.casefold().split())
+
+    roll_numbers_by_name = {
+        normalized_name(row["Name"]): row["Roll Number"]
+        for row in roll_map
+        if row["Name"]
+    }
+    tracking_names = {
+        normalized_name(str(record.get(mapping["name"], "")))
+        for record in records
+    }
     students = tracker.get_admin_students()
-    by_email = {
-        str(student.get("email") or "").strip().casefold(): student
-        for student in students
-        if student.get("email")
-    }
-    by_profile = {
-        str(student.get("skills_profile_url") or "").strip().casefold(): student
-        for student in students
-        if student.get("skills_profile_url")
-    }
-    for saved in roll_map:
-        student = by_email.get(saved["User Email"].casefold()) or by_profile.get(
-            saved["Google Skills Profile URL"].casefold()
-        )
-        if not student:
-            continue
-        visible_value = saved["Public Visible"].casefold()
-        if visible_value in {"true", "1", "yes", "approved"}:
-            visible = True
-        elif visible_value in {"", "false", "0", "no", "hidden"}:
-            visible = False
-        else:
+    students_by_name: dict[str, list[dict]] = {}
+    for student in students:
+        students_by_name.setdefault(normalized_name(student["name"]), []).append(student)
+    for name in roll_numbers_by_name:
+        if len(students_by_name.get(name, [])) > 1:
             raise ValueError(
-                f'Invalid Public Visible value for {saved["User Email"] or saved["Google Skills Profile URL"]}.'
+                f'The name "{name}" appears more than once in Tracking Data; its roll number is ambiguous.'
             )
-        roll_number = saved["Roll Number"] or None
+    for student in students:
+        name = normalized_name(student["name"])
+        visible = name in tracking_names
+        roll_number = (
+            roll_numbers_by_name[name]
+            if name in roll_numbers_by_name
+            else student.get("roll_number")
+        )
+        roll_number = roll_number or None
         if (
             student.get("roll_number") != roll_number
             or bool(student["public_visible"]) != visible
@@ -329,8 +334,8 @@ def render_google_sheet_sync() -> None:
             "Set SPREADSHEET_ID and [google_service_account] in Streamlit Secrets."
         )
     st.markdown(
-        "Update the **Tracking Data** tab with the latest Google export. Keep the **Roll Number Map** "
-        "tab intact; roll numbers and profile approvals saved under **Students** are written there."
+        "Update **Tracking Data** with the latest export. Keep the **rollno map** tab intact; it "
+        "matches the `Name` and `Roll Number` columns and preserves your curated roll numbers."
     )
     if st.button("Refresh Google Sheets now", type="primary"):
         read_google_sheet_tabs.clear()
@@ -456,6 +461,19 @@ def render_student(student: dict) -> None:
     with st.container(key="student_search_result"):
         st.subheader(student["name"])
         st.caption(f"Roll number: {student.get('roll_number') or 'Not assigned'}")
+        profile_links = [
+            ("Google Skills profile", student.get("skills_profile_url")),
+            ("Google Developer profile", student.get("developer_profile_url")),
+        ]
+        available_links = [
+            (label, url)
+            for label, url in profile_links
+            if url and urlparse(url).scheme == "https" and urlparse(url).netloc
+        ]
+        if available_links:
+            link_columns = st.columns(len(available_links))
+            for column, (label, url) in zip(link_columns, available_links):
+                column.link_button(label, url, use_container_width=True)
         count = int(student["badges_count"])
         st.progress(count / 10, text=f"{count}/10 skill badges completed")
         if count >= 10:
@@ -529,7 +547,7 @@ def render_home() -> None:
     render_resource_buttons()
     st.markdown("### Find a student")
     st.caption(
-        "Search only finds profiles that an administrator has approved for public display. Emails and profile links are never shown here."
+        "Participants in the tracking sheet are public. Roll numbers and Google profile links are shown; student emails are not."
     )
     query = st.text_input(
         "Search by name, roll number, or email",
@@ -540,7 +558,7 @@ def render_home() -> None:
     if query.strip():
         matches = tracker.search_public_students(query)
         if not matches:
-            st.info("No approved student profile matched that search.")
+            st.info("No participant matched that search.")
         elif len(matches) == 1:
             profile = tracker.get_student_profile(matches[0]["id"])
             if profile:
@@ -568,10 +586,10 @@ def render_home() -> None:
             icon = ("🥇", "🥈", "🥉")[index - 1]
             st.markdown(f"{icon} **{leader['name']}** · {leader['badges_count']}/10 badges")
     else:
-        st.info("The leaderboard will appear once approved student profiles are available.")
+        st.info("The leaderboard will appear when participant data is available.")
     st.markdown("---")
     st.subheader("GDG participants")
-    st.caption("Browse approved participant profiles and their current badge progress.")
+    st.caption("Browse participants from the tracking sheet, their badge progress, and profile links.")
     participant_search = st.text_input(
         "Filter participants",
         placeholder="Search participant name or roll number",
@@ -593,6 +611,8 @@ def render_home() -> None:
                     "Participant": participant["name"],
                     "Roll number": participant.get("roll_number") or "Not assigned",
                     "Badges completed": f'{participant["badges_count"]}/10',
+                    "Google Skills profile": participant.get("skills_profile_url") or "",
+                    "Google Developer profile": participant.get("developer_profile_url") or "",
                 }
                 for participant in participants
             ]
@@ -602,6 +622,14 @@ def render_home() -> None:
             width="stretch",
             hide_index=True,
             height=min(460, 38 + 35 * len(participants)),
+            column_config={
+                "Google Skills profile": st.column_config.LinkColumn(
+                    "Google Skills profile", display_text="Open profile"
+                ),
+                "Google Developer profile": st.column_config.LinkColumn(
+                    "Google Developer profile", display_text="Open profile"
+                ),
+            },
         )
         if has_more_participants and st.button(
             "Load more participants",
@@ -612,9 +640,9 @@ def render_home() -> None:
             st.rerun()
     else:
         if participant_search:
-            st.info("No approved participants matched that filter.")
+            st.info("No participants matched that filter.")
         else:
-            st.info("No approved participants are available yet.")
+            st.info("No participants are available yet.")
 
 
 def render_leaderboard() -> None:
@@ -629,7 +657,7 @@ def render_leaderboard() -> None:
     limit = int(limit_label.split()[1])
     leaders = tracker.get_leaderboard(limit=limit, sort_by="progress")
     if not leaders:
-        st.info("No approved student profiles are available on the leaderboard yet.")
+        st.info("No student profiles are available on the leaderboard yet.")
         return
     if len(leaders) >= 3:
         podium = st.columns([1, 1.15, 1])
@@ -646,11 +674,25 @@ def render_leaderboard() -> None:
                 "Student": student["name"],
                 "Roll number": student.get("roll_number") or "Not assigned",
                 "Skill badges": student["badges_count"],
+                "Google Skills profile": student.get("skills_profile_url") or "",
+                "Google Developer profile": student.get("developer_profile_url") or "",
             }
             for rank, student in enumerate(leaders, start=1)
         ]
     )
-    st.dataframe(frame, width="stretch", hide_index=True)
+    st.dataframe(
+        frame,
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "Google Skills profile": st.column_config.LinkColumn(
+                "Google Skills profile", display_text="Open profile"
+            ),
+            "Google Developer profile": st.column_config.LinkColumn(
+                "Google Developer profile", display_text="Open profile"
+            ),
+        },
+    )
     safe_frame = pd.DataFrame(
         [
             {key: tracker.spreadsheet_safe(value) for key, value in row.items()}
@@ -833,7 +875,7 @@ def render_csv_import() -> None:
 def render_student_admin() -> None:
     heading(
         "Student records",
-        "Assign roll numbers and approve profiles; these settings are saved to the Roll Number Map tab.",
+        "Participant roster and roll numbers are synced from Tracking Data and rollno map.",
     )
     search = st.text_input("Filter by name, email, or roll number")
     completion_filter = st.selectbox(
@@ -863,7 +905,7 @@ def render_student_admin() -> None:
                     "Badges": f'{student["badges_count"]}/10',
                     "Achievement status": "Complete" if student["badges_count"] == 10 else "In progress",
                     "XP": student["xp"],
-                    "Public profile": "Approved" if student["public_visible"] else "Hidden",
+                    "Public profile": "Public" if student["public_visible"] else "Not in tracking sheet",
                     "Last updated": student["updated_at"],
                 }
                 for student in students
@@ -880,35 +922,17 @@ def render_student_admin() -> None:
         file_name="gdg-mcet-student-progress.csv",
         mime="text/csv",
     )
-    st.markdown("#### Profile visibility and roll numbers")
+    st.markdown("#### Student record")
     options = {
         f'{student["name"]} · {student.get("roll_number") or "No roll number"} · {student.get("email") or ""}': student
         for student in students
     }
     selected_label = st.selectbox("Select a student", list(options))
     selected = options[selected_label]
-    with st.form("student_visibility_form"):
-        roll_number = st.text_input("Roll number", value=selected.get("roll_number") or "")
-        visible = st.checkbox("Approve this profile for public search", value=bool(selected["public_visible"]))
-        submitted = st.form_submit_button("Save student settings", type="primary")
-    if submitted:
-        try:
-            tracker.update_student_settings(selected["id"], roll_number, visible)
-            if SHEET_STORE:
-                SHEET_STORE.save_student_mapping(
-                    selected.get("email") or "",
-                    selected.get("skills_profile_url") or "",
-                    roll_number,
-                    visible,
-                )
-            if SHEET_STORE:
-                read_google_sheet_tabs.clear()
-            st.success("Student settings saved.")
-            st.rerun()
-        except sqlite3.IntegrityError:
-            st.error("That roll number is already assigned to another student.")
-        except Exception as error:
-            st.error(f"Could not save student settings: {error}")
+    st.caption(
+        f'Roll number: {selected.get("roll_number") or "Not assigned"} · '
+        "Public visibility follows membership in Tracking Data. Edit roll numbers in the rollno map tab."
+    )
     transactions = tracker.get_xp_transactions(selected["id"])
     if transactions:
         with st.expander("XP transaction audit"):
@@ -1019,6 +1043,11 @@ def render_admin() -> None:
     elif not SHEET_STORE:
         st.warning(
             "Google Sheets is not configured. Changes are local only and may be lost when the app restarts."
+        )
+    elif metrics["students"]:
+        st.warning(
+            "All participants in Tracking Data are publicly visible, including roll numbers and any "
+            "Google profile links present in the sheet."
         )
     with st.sidebar:
         if st.button("Sign out of admin"):

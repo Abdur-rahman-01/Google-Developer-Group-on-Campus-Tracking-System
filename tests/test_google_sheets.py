@@ -7,8 +7,9 @@ from google_sheets import GoogleSheetsStore, TRACKING_HEADERS
 
 
 class FakeWorksheet:
-    def __init__(self, values):
+    def __init__(self, values, title=""):
         self.values = values
+        self.title = title
         self.updates = []
         self.appended = []
 
@@ -24,17 +25,20 @@ class FakeWorksheet:
 
 class FakeSpreadsheet:
     def __init__(self, worksheets):
-        self.worksheets = worksheets
+        self._worksheets = worksheets
 
     def worksheet(self, title):
-        if title not in self.worksheets:
+        if title not in self._worksheets:
             raise gspread.WorksheetNotFound(title)
-        return self.worksheets[title]
+        return self._worksheets[title]
 
     def add_worksheet(self, title, rows, cols):
-        worksheet = FakeWorksheet([])
-        self.worksheets[title] = worksheet
+        worksheet = FakeWorksheet([], title)
+        self._worksheets[title] = worksheet
         return worksheet
+
+    def worksheets(self):
+        return list(self._worksheets.values())
 
 
 class GoogleSheetsStoreTests(unittest.TestCase):
@@ -78,44 +82,105 @@ class GoogleSheetsStoreTests(unittest.TestCase):
 
         self.assertEqual(store.read_roll_number_map(), [])
 
-        worksheet = spreadsheet.worksheets["Roll Number Map"]
-        self.assertEqual(worksheet.updates[0]["range_name"], "A1:D1")
-        self.assertEqual(worksheet.updates[0]["values"], [list(TRACKING_HEADERS)])
+        worksheet = spreadsheet._worksheets["rollno map"]
+        self.assertEqual(worksheet.updates[0]["range_name"], "A1:B1")
+        self.assertEqual(
+            worksheet.updates[0]["values"],
+            [["Name", "Roll Number"]],
+        )
 
     def test_saves_student_mapping_and_updates_existing_identity(self):
         worksheet = FakeWorksheet(
             [
-                list(TRACKING_HEADERS),
-                ["student@example.com", "https://skills.example/1", "123", "FALSE"],
-            ]
+                ["Name", "Roll No"],
+                ["Student One", "123"],
+            ],
+            "rollno map",
         )
-        store, _ = self.make_store({"Roll Number Map": worksheet})
+        store, _ = self.make_store({"rollno map": worksheet})
 
         store.save_student_mapping(
-            "STUDENT@example.com",
-            "https://skills.example/1",
+            " student   one ",
             "456",
-            True,
         )
 
         self.assertEqual(
             worksheet.updates,
             [
                 {
-                    "range_name": "A2:D2",
-                    "values": [
-                        [
-                            "STUDENT@example.com",
-                            "https://skills.example/1",
-                            "456",
-                            "TRUE",
-                        ]
-                    ],
+                    "range_name": "A2:B2",
+                    "values": [["student   one", "456"]],
                     "value_input_option": "RAW",
                 }
             ],
         )
         self.assertEqual(worksheet.appended, [])
+
+    def test_reads_name_roll_map_and_rejects_duplicate_names(self):
+        store, _ = self.make_store(
+            {
+                "rollno map": FakeWorksheet(
+                    [
+                        ["Name", "Roll Number"],
+                        ["Student One", "123"],
+                        ["Student Two", "456"],
+                    ],
+                    "rollno map",
+                )
+            }
+        )
+
+        self.assertEqual(
+            store.read_roll_number_map(),
+            [
+                {"Name": "Student One", "Roll Number": "123"},
+                {"Name": "Student Two", "Roll Number": "456"},
+            ],
+        )
+
+    def test_rejects_duplicate_name_and_roll_number_entries(self):
+        duplicate_names, _ = self.make_store(
+            {
+                "rollno map": FakeWorksheet(
+                    [
+                        ["Name", "Roll Number"],
+                        ["Student One", "123"],
+                        [" student  one ", "456"],
+                    ],
+                    "rollno map",
+                )
+            }
+        )
+        with self.assertRaisesRegex(ValueError, "duplicate student name"):
+            duplicate_names.read_roll_number_map()
+
+        duplicate_rolls, _ = self.make_store(
+            {
+                "rollno map": FakeWorksheet(
+                    [
+                        ["Name", "Roll Number"],
+                        ["Student One", "123"],
+                        ["Student Two", "123"],
+                    ],
+                    "rollno map",
+                )
+            }
+        )
+        with self.assertRaisesRegex(ValueError, "duplicate roll number"):
+            duplicate_rolls.read_roll_number_map()
+
+    def test_finds_roll_map_tab_when_configured_with_old_tab_label(self):
+        store, _ = self.make_store(
+            {
+                "rollno map": FakeWorksheet(
+                    [["Name", "Roll Number"], ["Student One", "123"]],
+                    "rollno map",
+                )
+            }
+        )
+        store.roll_map_tab = "Roll Number Map"
+
+        self.assertEqual(store.read_roll_number_map()[0]["Roll Number"], "123")
 
 
 if __name__ == "__main__":

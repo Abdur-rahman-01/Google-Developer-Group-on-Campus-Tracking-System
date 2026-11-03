@@ -16,6 +16,7 @@ class TrackerTests(unittest.TestCase):
             "name": "User Name",
             "email": "User Email",
             "skills_profile_url": "Google Skills Profile URL",
+            "developer_profile_url": "Google Developer Profile URL",
             "badges_count": "Skill Badges Completed Count",
             "badges_names": "Skill Badges Completed Names",
             "access_code": "Access Code",
@@ -71,6 +72,7 @@ class TrackerTests(unittest.TestCase):
             "User Name": "Test Student",
             "User Email": "student@example.edu",
             "Google Skills Profile URL": "https://skills.example/student-1",
+            "Google Developer Profile URL": "https://developers.example/student-1",
             "Skill Badges Completed Count": "0",
             "Skill Badges Completed Names": "",
             "Access Code": "PRIVATE-CODE",
@@ -192,6 +194,11 @@ class TrackerTests(unittest.TestCase):
         profile = tracker.get_student_profile(student["id"], db_path=self.db_path)
         self.assertNotIn("email", profile)
         self.assertNotIn("access_code", profile)
+        self.assertEqual(profile["skills_profile_url"], "https://skills.example/student-1")
+        self.assertEqual(
+            profile["developer_profile_url"],
+            "https://developers.example/student-1",
+        )
 
     def test_public_participants_are_paginated_and_hide_private_fields(self):
         rows = [
@@ -235,6 +242,10 @@ class TrackerTests(unittest.TestCase):
         self.assertFalse(matching_has_more)
         self.assertNotIn("email", first_page[0])
         self.assertNotIn("access_code", first_page[0])
+        self.assertEqual(
+            first_page[0]["skills_profile_url"],
+            "https://skills.example/student-0",
+        )
 
     def test_curated_import_snapshot_preserves_rolls_and_never_exports_access_codes(self):
         row = self.row(
@@ -282,6 +293,8 @@ class TrackerTests(unittest.TestCase):
                     "Milestone Completed": "No Milestone",
                     "Google Skills Profile Status": "Complete",
                     "Google Developer Profile Status": "Complete",
+                    "Google Skills Profile URL": "https://skills.google/profile/student",
+                    "Google Developer Profile URL": "https://developers.google.com/profile/student",
                     "Access Code Redemption Status": "Redeemed",
                 }
             )
@@ -298,12 +311,22 @@ class TrackerTests(unittest.TestCase):
                 "name",
                 "badges_count",
                 "badges_names",
+                "skills_profile_url",
+                "developer_profile_url",
                 "access_code_status",
                 "is_gear_participant",
             },
         )
         self.assertFalse(profile["is_gear_participant"])
         self.assertEqual(profile["badges_names"], list(tracker.LAB_CATALOG[:2]))
+        self.assertEqual(
+            profile["skills_profile_url"],
+            "https://skills.google/profile/student",
+        )
+        self.assertEqual(
+            profile["developer_profile_url"],
+            "https://developers.google.com/profile/student",
+        )
         self.assertEqual(profile["access_code_status"], "Redeemed")
         self.assertNotIn("gear_badges", profile)
         self.assertNotIn("developer_profile_status", profile)
