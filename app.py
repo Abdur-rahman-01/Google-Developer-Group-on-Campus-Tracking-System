@@ -4,6 +4,7 @@ import csv
 import hashlib
 import hmac
 import html
+import io
 import json
 import os
 import sqlite3
@@ -15,6 +16,7 @@ import plotly.express as px
 import streamlit as st
 from streamlit.errors import StreamlitSecretNotFoundError
 
+from google_sheets import GoogleSheetsStore
 import tracker
 
 
@@ -166,6 +168,173 @@ st.markdown(
 )
 
 tracker.initialize_database()
+
+
+@st.cache_resource
+def google_sheets_store(
+    spreadsheet_id: str,
+    tracking_tab: str,
+    roll_map_tab: str,
+    service_account_json: str,
+) -> GoogleSheetsStore:
+    return GoogleSheetsStore(
+        spreadsheet_id,
+        json.loads(service_account_json),
+        tracking_tab,
+        roll_map_tab,
+    )
+
+
+@st.cache_data(ttl=120)
+def read_google_sheet_tabs(
+    spreadsheet_id: str,
+    tracking_tab: str,
+    roll_map_tab: str,
+    service_account_json: str,
+) -> tuple[list[str], list[dict[str, str]], list[dict[str, str]]]:
+    store = google_sheets_store(
+        spreadsheet_id,
+        tracking_tab,
+        roll_map_tab,
+        service_account_json,
+    )
+    headers, records = store.read_tracking_data()
+    return headers, records, store.read_roll_number_map()
+
+
+def google_sheets_configuration() -> tuple[str, str, str, dict] | None:
+    try:
+        spreadsheet_id = str(st.secrets.get("SPREADSHEET_ID", "")).strip()
+        service_account = dict(st.secrets.get("google_service_account", {}))
+        tracking_tab = str(st.secrets.get("TRACKING_SHEET_TAB", "Tracking Data")).strip()
+        roll_map_tab = str(st.secrets.get("ROLL_NUMBER_MAP_TAB", "Roll Number Map")).strip()
+    except StreamlitSecretNotFoundError:
+        return None
+    if not spreadsheet_id or not service_account:
+        return None
+    return spreadsheet_id, tracking_tab, roll_map_tab, service_account
+
+
+def synchronize_google_sheet() -> tuple[GoogleSheetsStore | None, str | None]:
+    configuration = google_sheets_configuration()
+    if configuration is None:
+        return None, None
+    spreadsheet_id, tracking_tab, roll_map_tab, service_account = configuration
+    credentials_json = json.dumps(service_account, sort_keys=True)
+    headers, records, roll_map = read_google_sheet_tabs(
+        spreadsheet_id,
+        tracking_tab,
+        roll_map_tab,
+        credentials_json,
+    )
+    source_digest = hashlib.sha256(
+        json.dumps([headers, records], ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    if tracker.get_app_setting("google_sheet_source_digest") != source_digest:
+        content = io.StringIO(newline="")
+        writer = csv.DictWriter(content, fieldnames=headers)
+        writer.writeheader()
+        writer.writerows(records)
+        csv_content = content.getvalue().encode("utf-8")
+        mapping = tracker.default_mapping(headers)
+        if "name" not in mapping or not {
+            "email",
+            "skills_profile_url",
+        }.intersection(mapping):
+            raise ValueError(
+                f'The "{tracking_tab}" tab must include a student name and email '
+                "or Google Skills profile URL column."
+            )
+        preview = tracker.preview_import(csv_content, mapping)
+        tracker.import_records(
+            preview["records"],
+            f"Google Sheets · {tracking_tab}",
+            preview["errors"],
+            authoritative=True,
+        )
+        tracker.set_app_setting("google_sheet_source_digest", source_digest)
+
+    students = tracker.get_admin_students()
+    by_email = {
+        str(student.get("email") or "").strip().casefold(): student
+        for student in students
+        if student.get("email")
+    }
+    by_profile = {
+        str(student.get("skills_profile_url") or "").strip().casefold(): student
+        for student in students
+        if student.get("skills_profile_url")
+    }
+    for saved in roll_map:
+        student = by_email.get(saved["User Email"].casefold()) or by_profile.get(
+            saved["Google Skills Profile URL"].casefold()
+        )
+        if not student:
+            continue
+        visible_value = saved["Public Visible"].casefold()
+        if visible_value in {"true", "1", "yes", "approved"}:
+            visible = True
+        elif visible_value in {"", "false", "0", "no", "hidden"}:
+            visible = False
+        else:
+            raise ValueError(
+                f'Invalid Public Visible value for {saved["User Email"] or saved["Google Skills Profile URL"]}.'
+            )
+        roll_number = saved["Roll Number"] or None
+        if (
+            student.get("roll_number") != roll_number
+            or bool(student["public_visible"]) != visible
+        ):
+            tracker.update_student_settings(
+                student["id"],
+                roll_number,
+                visible,
+            )
+    return (
+        google_sheets_store(
+            spreadsheet_id,
+            tracking_tab,
+            roll_map_tab,
+            credentials_json,
+        ),
+        None,
+    )
+
+
+SHEET_STORE: GoogleSheetsStore | None = None
+SHEET_SYNC_ERROR: str | None = None
+try:
+    SHEET_STORE, SHEET_SYNC_ERROR = synchronize_google_sheet()
+except Exception as error:
+    SHEET_SYNC_ERROR = str(error)
+
+
+def render_google_sheet_sync() -> None:
+    heading(
+        "Google Sheets sync",
+        "The private spreadsheet is the source of participant progress and curated roll numbers.",
+    )
+    if SHEET_SYNC_ERROR:
+        st.error(
+            "Google Sheets sync failed. The displayed roster may be from the last successful "
+            f"sync. Details: {SHEET_SYNC_ERROR}"
+        )
+    elif SHEET_STORE:
+        st.success(
+            "Google Sheets connected. Data is refreshed on page load and after the two-minute cache expires."
+        )
+    else:
+        st.warning(
+            "Google Sheets is not configured. The app is currently using its local SQLite database. "
+            "Set SPREADSHEET_ID and [google_service_account] in Streamlit Secrets."
+        )
+    st.markdown(
+        "Update the **Tracking Data** tab with the latest Google export. Keep the **Roll Number Map** "
+        "tab intact; roll numbers and profile approvals saved under **Students** are written there."
+    )
+    if st.button("Refresh Google Sheets now", type="primary"):
+        read_google_sheet_tabs.clear()
+        st.rerun()
 
 
 def admin_password() -> str:
@@ -662,7 +831,10 @@ def render_csv_import() -> None:
 
 
 def render_student_admin() -> None:
-    heading("Student records", "Assign roll numbers and explicitly approve profiles for public search.")
+    heading(
+        "Student records",
+        "Assign roll numbers and approve profiles; these settings are saved to the Roll Number Map tab.",
+    )
     search = st.text_input("Filter by name, email, or roll number")
     completion_filter = st.selectbox(
         "Progress status", ["All", "Not started", "In progress", "1–2 remaining", "Completed all 10"]
@@ -678,7 +850,7 @@ def render_student_admin() -> None:
         completion_filter=completion_filter,
     )
     if not students:
-        st.info("No student records found. Import a CSV to get started.")
+        st.info("No student records found. Add participant rows to the Tracking Data sheet.")
         return
     st.caption(f"Showing {len(students)} of {total} matching records.")
     st.dataframe(
@@ -722,10 +894,21 @@ def render_student_admin() -> None:
     if submitted:
         try:
             tracker.update_student_settings(selected["id"], roll_number, visible)
+            if SHEET_STORE:
+                SHEET_STORE.save_student_mapping(
+                    selected.get("email") or "",
+                    selected.get("skills_profile_url") or "",
+                    roll_number,
+                    visible,
+                )
+            if SHEET_STORE:
+                read_google_sheet_tabs.clear()
             st.success("Student settings saved.")
             st.rerun()
         except sqlite3.IntegrityError:
             st.error("That roll number is already assigned to another student.")
+        except Exception as error:
+            st.error(f"Could not save student settings: {error}")
     transactions = tracker.get_xp_transactions(selected["id"])
     if transactions:
         with st.expander("XP transaction audit"):
@@ -746,10 +929,10 @@ def render_student_admin() -> None:
 
 
 def render_import_history() -> None:
-    heading("Import history", "Every CSV sync includes a report and skipped-row log.")
+    heading("Sync history", "Recent spreadsheet synchronizations and skipped-row reports.")
     history = tracker.get_import_history()
     if not history:
-        st.info("No CSV files have been imported.")
+        st.info("No Google Sheets changes have been synchronized yet.")
         return
     st.dataframe(
         pd.DataFrame(
@@ -828,14 +1011,15 @@ def render_gamification_settings() -> None:
         except (ValueError, KeyError, TypeError) as error:
             st.error(str(error))
 def render_admin() -> None:
-    heading("Admin console", "Manage sheet imports, student visibility, and community settings.")
+    heading("Admin console", "Manage spreadsheet data, student visibility, and community settings.")
     if not admin_login():
         return
-    st.warning(
-        "Student records are stored in the app's SQLite database. Streamlit Community Cloud storage "
-        "may be lost when the app restarts or redeploys; keep a secure backup and use durable storage "
-        "for records that must persist."
-    )
+    if SHEET_SYNC_ERROR:
+        st.error(f"Google Sheets sync failed: {SHEET_SYNC_ERROR}")
+    elif not SHEET_STORE:
+        st.warning(
+            "Google Sheets is not configured. Changes are local only and may be lost when the app restarts."
+        )
     with st.sidebar:
         if st.button("Sign out of admin"):
             st.session_state.gdg_admin_authenticated = False
@@ -903,11 +1087,11 @@ def render_admin() -> None:
             width="stretch",
             hide_index=True,
         )
-    tab_import, tab_students, tab_history, tab_settings = st.tabs(
-        ["CSV sync", "Students", "Import history", "Gamification"]
+    tab_sheet, tab_students, tab_history, tab_settings = st.tabs(
+        ["Google Sheets", "Students", "Sync history", "Gamification"]
     )
-    with tab_import:
-        render_csv_import()
+    with tab_sheet:
+        render_google_sheet_sync()
     with tab_students:
         render_student_admin()
     with tab_history:
@@ -919,6 +1103,10 @@ def render_admin() -> None:
 with st.sidebar:
     st.image(str(LOGO_PATH), width=160)
     st.caption("Cloud learning tracker")
+    if SHEET_SYNC_ERROR:
+        st.warning("Google Sheets is unavailable; the roster may be stale.")
+    elif not SHEET_STORE:
+        st.caption("Google Sheets is not configured.")
     pages = ["Home", "Leaderboard"]
     if admin_password():
         pages.append("Admin")

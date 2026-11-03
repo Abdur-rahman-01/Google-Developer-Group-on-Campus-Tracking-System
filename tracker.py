@@ -595,7 +595,7 @@ def import_records(
                     roll = values.pop("roll_number", None)
                     email = values.pop("email", None)
                     profile = values.pop("skills_profile_url", None)
-                    connection.execute(
+                    cursor = connection.execute(
                         """
                         INSERT INTO students (
                             roll_number, name, email, skills_profile_url, skills_profile_status,
@@ -623,7 +623,7 @@ def import_records(
                             now,
                         ),
                     )
-                    student_id = connection.execute("SELECT last_insert_rowid()").fetchone()[0]
+                    student_id = cursor.lastrowid
                     _apply_progress(connection, student_id, 0, count, settings)
                     counts["new_students"] += 1
                     continue
@@ -1097,6 +1097,25 @@ def load_mapping(db_path: str | Path | None = None) -> dict[str, str]:
             "SELECT value FROM app_settings WHERE key = 'column_mapping'"
         ).fetchone()
     return json.loads(row["value"]) if row else {}
+
+
+def get_app_setting(key: str, db_path: str | Path | None = None) -> str | None:
+    with get_connection(db_path) as connection:
+        row = connection.execute(
+            "SELECT value FROM app_settings WHERE key = ?", (key,)
+        ).fetchone()
+    return row["value"] if row else None
+
+
+def set_app_setting(
+    key: str, value: str, db_path: str | Path | None = None
+) -> None:
+    with get_connection(db_path) as connection:
+        connection.execute(
+            "INSERT INTO app_settings(key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (key, value),
+        )
 
 
 def get_level(xp: int, levels: list[dict[str, Any]] | None = None) -> str:

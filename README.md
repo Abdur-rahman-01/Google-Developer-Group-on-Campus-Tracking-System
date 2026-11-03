@@ -15,7 +15,7 @@ The supplied `GDGC-MCETH [01 Nov].csv` has 98 records and these columns:
 - Milestone Completed, GEAR Digital Badges
 - Skill Badges Completed Count and Skill Badges Completed Names
 
-There is **no roll-number column**. The importer therefore matches existing students by email (or Google Skills profile URL). Admins can add each roll number after importing; that number is then searchable in the public portal. Column mapping is configurable and saved for future uploads. Raw access codes are deliberately skipped by default because they are redeemable secrets; the redemption-status field is imported.
+There is **no roll-number column**. The app matches student records by email (or Google Skills profile URL) and loads curated roll numbers from the separate **Roll Number Map** tab. Raw access codes are deliberately skipped because they are redeemable secrets; the redemption-status field is imported.
 
 ## Run locally
 
@@ -34,41 +34,54 @@ The local database is created at `data/gdg_tracker.db`. Set `GDG_DB_PATH` to cho
 
 Public search and the Home-page participant list show only profiles explicitly approved by an administrator. They return a student's name, roll number, completed badge titles, and access-code redemption status. Students can search by name, roll number, or exact email; the email is used only for matching and is never displayed. The participant list has a filter for names and roll numbers. GEAR program details are shown only for students whose GEAR badge field indicates GEAR participation; profile URLs and raw access codes are never displayed. Incomplete profiles show learning links for the campaign syllabus, lab playlist, and the Step 1 credit-claim guide, alongside a WhatsApp help button. Completed profiles celebrate all 10 skill badges with a completion message and visual effects. Public pages rank students by badge progress and do not display XP or platform levels. Use HTTPS for any public deployment.
 
-## CSV synchronization rules
+## Google Sheets synchronization rules
 
-1. The synchronization engine can preview a CSV, review or adjust detected column mappings, and analyze it before importing.
-2. Duplicate email/profile identifiers and duplicate roll numbers in the file are flagged and skipped; rows without a student name and match identifier are also skipped.
-3. Default **cumulative** mode is safe for regular updates: blank fields preserve existing values, badge counts never decrease, and badge names are merged.
-4. An explicitly confirmed **authoritative snapshot** can correct a badge count downward. It records compensating XP ledger entries. Use this only when the sheet is a complete, verified snapshot.
-5. Student changes, XP transactions, achievements, import history, and row errors are written in one SQLite transaction. Re-uploading the same file does not grant duplicate XP or achievements.
-6. XP and levels remain internal tracker records and are not displayed on public pages; they are not official Google Cloud credentials.
-7. Progress totals are snapshotted after successful imports for comparison over time.
+1. The app reads the full **Tracking Data** tab, detects supported headers, and matches records by email or Google Skills profile URL.
+2. The latest tab is treated as an authoritative snapshot, so corrected badge counts can decrease. Progress and XP adjustments are applied only when the source data changes.
+3. Roll numbers and public-profile approvals are read from **Roll Number Map** and are never overwritten by replacing the tracking export.
+4. New profiles are hidden by default. Approve a profile through **Admin → Students**; the choice is saved to the map tab.
+5. The app skips raw access codes. Keep the spreadsheet private because it contains participant email and profile data.
 
 The CSV's completed-badge count is the source for overall progress. Named badge completion is shown only when the supplied “Skill Badges Completed Names” field identifies one of the ten badge titles; unnamed completions are not guessed.
 
 ## Deployment
 
-The app is a standard Streamlit application and can run on any host that supports Python and Streamlit. Configure:
+Keep Streamlit Community Cloud and use a private Google spreadsheet as the durable source for student progress, roll numbers, and public-profile approvals. SQLite is only a local working cache for the app's calculations and admin history; student roster data is reloaded from Sheets and roll-number settings are written back to Sheets.
 
-- Build/install: `pip install -r requirements.txt`
-- Start: `streamlit run app.py --server.address 0.0.0.0 --server.port $PORT`
-- Persistent database path: `GDG_DB_PATH`
+### Prepare the spreadsheet
 
-**Use a host with a persistent disk** and set `GDG_DB_PATH` to a file on that mounted disk (for example `/var/data/gdg_tracker.db`). Do not rely on an ephemeral container filesystem for the database: student records and import history would be lost when the instance is replaced. For multiple app instances, use a shared managed database instead of SQLite. Put the app behind HTTPS.
+1. Create a private Google spreadsheet with a **Tracking Data** tab. Paste the latest Google tracking export there, including its header row. The app detects supported column names automatically; the tab must contain a student name plus an email or Google Skills profile URL.
+2. The app creates a **Roll Number Map** tab the first time it connects. Keep its header row and contents. Its columns are `User Email`, `Google Skills Profile URL`, `Roll Number`, and `Public Visible`. The map is kept separate so replacing the tracking export does not remove curated roll numbers or approvals.
+3. For the initial migration, copy the email/profile URL and roll number pairs from your private curated snapshot into **Roll Number Map**. Once loaded, later tracking exports do not need roll numbers. Admin edits to roll numbers and profile approvals are saved to this tab.
 
-### Render persistent-disk deployment
+### Connect Streamlit to Sheets
 
-The repository includes a `render.yaml` Blueprint that mounts a private disk at `/var/data` and stores SQLite there. In Render, create a new Blueprint from this repository and its `username` branch. Set the required `GDG_ADMIN_PASSWORD` environment variable in Render; never commit it. The persistent disk and web service may incur charges.
-
-To migrate the existing curated records, download **Admin → CSV sync → Download curated migration snapshot** from the app that still has the local data. This private file includes email and roll numbers but excludes raw access codes; do not commit or share it publicly. Upload it once to the new app, select **Approve new profiles for public display**, analyze, and import. Then approve any remaining profiles as appropriate. For routine sheet updates, leave that checkbox off and import the new tracking CSV; rows match by email/profile and blank fields preserve existing roll numbers. Keep the Render disk attached to preserve records across deploys.
-
-For Streamlit Community Cloud, add an admin password in the app's **Settings → Secrets** (never commit it):
+1. Create a Google service account, enable the Google Sheets API for its project, and share the spreadsheet with the service account's `client_email` as an **Editor**. The app needs write access to update **Roll Number Map**.
+2. In Streamlit Community Cloud, open the app's **Settings → Secrets** and add the spreadsheet ID, tab names, and service-account fields. Keep these credentials private and out of GitHub:
 
 ```toml
+SPREADSHEET_ID = "your-google-spreadsheet-id"
+TRACKING_SHEET_TAB = "Tracking Data"
+ROLL_NUMBER_MAP_TAB = "Roll Number Map"
 GDG_ADMIN_PASSWORD = "use-a-long-unique-password"
+
+[google_service_account]
+type = "service_account"
+project_id = "your-google-cloud-project"
+private_key_id = "..."
+private_key = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+client_email = "your-service-account@your-project.iam.gserviceaccount.com"
+client_id = "..."
+auth_uri = "https://accounts.google.com/o/oauth2/auth"
+token_uri = "https://oauth2.googleapis.com/token"
+auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
+client_x509_cert_url = "..."
 ```
 
-After redeploying, use the **Admin** item in the sidebar to preview and import the CSV, then approve only the profiles intended for public display in **Students**. The CSV and local database are intentionally excluded from GitHub. Community Cloud's local filesystem is not a durable database; use a host with persistent storage or a managed database for participant records that must survive restarts or redeployments.
+3. Save the secrets and reboot the app. Open **Admin → Google Sheets** to verify the connection. The app refreshes the tracking tab every two minutes; you can also request an immediate refresh there.
+4. When updating participant progress, replace the data rows in **Tracking Data** while preserving the header row. Do not clear or replace **Roll Number Map**.
+
+The spreadsheet must remain private. Google Sheets version history provides recovery for edits; the app's ignored local SQLite file is not required for preserving the roster across deploys. The app's import/sync history and gamification settings remain local and may reset when Community Cloud replaces the app instance.
 
 ## Tests
 

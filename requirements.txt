@@ -2,3 +2,4 @@ streamlit>=1.50,<2
 pandas>=2.2,<4
 plotly>=5.24,<7
 websockets>=16.1.1,<17
+gspread>=6,<7
