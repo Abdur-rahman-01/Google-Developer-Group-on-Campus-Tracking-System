@@ -8,6 +8,21 @@ from streamlit.testing.v1 import AppTest
 
 
 class AppTests(unittest.TestCase):
+    def test_home_handles_missing_access_code_counts_without_hiding_metric(self):
+        app_path = Path(__file__).parent.parent / "app.py"
+        metrics = {"students": 0, "completed": 0, "badges": 0, "completion_rate": 0.0}
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
+            os.environ,
+            {"GDG_DB_PATH": str(Path(temp_dir) / "app.db")},
+        ), patch("tracker.get_dashboard_data", return_value=metrics):
+            app = AppTest.from_file(str(app_path), default_timeout=30).run()
+
+            self.assertFalse(app.exception)
+            redemption_metric = next(
+                item for item in app.metric if item.label == "Access code redemption status"
+            )
+            self.assertEqual(redemption_metric.value, "Unavailable · Unavailable not redeemed")
+
     def test_sidebar_navigates_single_page_sections_without_admin(self):
         app_path = Path(__file__).parent.parent / "app.py"
         with tempfile.TemporaryDirectory() as temp_dir, patch.dict(

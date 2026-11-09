@@ -656,11 +656,17 @@ def render_home() -> None:
     first, second, third, fourth = st.columns(4)
     first.metric("Participating students", f'{metrics["students"]:,}')
     second.metric("Students completed all 10", f'{metrics["completed"]:,}')
-    third.metric(
-        "Access code redemption status",
-        f'{metrics["access_codes_redeemed"]:,} redeemed · '
-        f'{metrics["access_codes_not_redeemed"]:,} not redeemed',
+    redeemed = metrics.get("access_codes_redeemed")
+    not_redeemed = metrics.get("access_codes_not_redeemed")
+    redemption_status = (
+        f'{redeemed:,} redeemed' if redeemed is not None else "Unavailable"
     )
+    redemption_status += (
+        f' · {not_redeemed:,} not redeemed'
+        if not_redeemed is not None
+        else " · Unavailable not redeemed"
+    )
+    third.metric("Access code redemption status", redemption_status)
     fourth.metric("Overall completion", f'{metrics["completion_rate"]:.1f}%')
     st.markdown("### Campaign resources")
     render_resource_buttons()
