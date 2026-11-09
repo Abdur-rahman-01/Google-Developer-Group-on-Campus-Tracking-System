@@ -66,6 +66,8 @@ class AppTests(unittest.TestCase):
             "average": 3.0,
             "recently_added": 1,
             "badges": 3,
+            "access_codes_redeemed": 5,
+            "access_codes_not_redeemed": 2,
             "completion_rate": 0.0,
             "last_updated": "2026-11-03",
         }
@@ -81,6 +83,12 @@ class AppTests(unittest.TestCase):
             "tracker.get_admin_students", return_value=[student]
         ), patch("tracker.get_xp_transactions", return_value=[]):
             app = AppTest.from_file(str(app_path), default_timeout=30).run()
+            self.assertFalse(app.exception)
+            redemption_metric = next(
+                item for item in app.metric if item.label == "Access code redemption status"
+            )
+            self.assertEqual(redemption_metric.value, "5 redeemed · 2 not redeemed")
+
             app.radio[0].set_value("Admin").run()
             app.session_state["gdg_admin_authenticated"] = True
             app.run()
