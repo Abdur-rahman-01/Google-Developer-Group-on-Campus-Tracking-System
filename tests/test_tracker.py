@@ -19,6 +19,7 @@ class TrackerTests(unittest.TestCase):
             "developer_profile_url": "Google Developer Profile URL",
             "badges_count": "Skill Badges Completed Count",
             "badges_names": "Skill Badges Completed Names",
+            "access_code_status": "Access Code Redemption Status",
             "access_code": "Access Code",
             "roll_number": "Roll Number",
         }
@@ -95,6 +96,39 @@ class TrackerTests(unittest.TestCase):
         student = tracker.get_admin_students(db_path=self.db_path)[0]
         self.assertEqual(student["xp"], 750)
         self.assertIsNone(tracker.get_student_profile(student["id"], db_path=self.db_path))
+
+    def test_dashboard_counts_access_code_redemption_status_from_imported_records(self):
+        rows = [
+            self.row(
+                **{
+                    "User Name": "Redeemed Student",
+                    "User Email": "redeemed@example.edu",
+                    "Google Skills Profile URL": "https://skills.example/redeemed",
+                    "Access Code Redemption Status": "Yes",
+                }
+            ),
+            self.row(
+                **{
+                    "User Name": "Not Redeemed Student",
+                    "User Email": "not-redeemed@example.edu",
+                    "Google Skills Profile URL": "https://skills.example/not-redeemed",
+                    "Access Code Redemption Status": "No",
+                }
+            ),
+            self.row(
+                **{
+                    "User Name": "Unknown Status Student",
+                    "User Email": "unknown@example.edu",
+                    "Google Skills Profile URL": "https://skills.example/unknown",
+                }
+            ),
+        ]
+        self.import_csv(self.make_csv(rows))
+
+        metrics = tracker.get_dashboard_data(self.db_path)
+
+        self.assertEqual(metrics["access_codes_redeemed"], 1)
+        self.assertEqual(metrics["access_codes_not_redeemed"], 1)
 
     def test_reimport_is_idempotent_and_does_not_duplicate_xp(self):
         row = self.row(

@@ -656,7 +656,11 @@ def render_home() -> None:
     first, second, third, fourth = st.columns(4)
     first.metric("Participating students", f'{metrics["students"]:,}')
     second.metric("Students completed all 10", f'{metrics["completed"]:,}')
-    third.metric("Skill badges earned", f'{metrics["badges"]:,}')
+    third.metric(
+        "Access code redemption status",
+        f'{metrics["access_codes_redeemed"]:,} redeemed · '
+        f'{metrics["access_codes_not_redeemed"]:,} not redeemed',
+    )
     fourth.metric("Overall completion", f'{metrics["completion_rate"]:.1f}%')
     st.markdown("### Campaign resources")
     render_resource_buttons()

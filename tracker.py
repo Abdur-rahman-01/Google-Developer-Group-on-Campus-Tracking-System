@@ -796,14 +796,31 @@ def get_student_profile(student_id: int, public_only: bool = True, db_path: str 
 
 def get_dashboard_data(db_path: str | Path | None = None) -> dict[str, Any]:
     with get_connection(db_path) as connection:
-        total, started, completed, badge_total, average, latest = connection.execute(
+        (
+            total,
+            started,
+            completed,
+            badge_total,
+            average,
+            latest,
+            access_codes_redeemed,
+            access_codes_not_redeemed,
+        ) = connection.execute(
             """
             SELECT COUNT(*),
                 COALESCE(SUM(CASE WHEN badges_count > 0 THEN 1 ELSE 0 END), 0),
                 COALESCE(SUM(CASE WHEN badges_count = 10 THEN 1 ELSE 0 END), 0),
                 COALESCE(SUM(badges_count), 0),
                 COALESCE(AVG(badges_count), 0),
-                MAX(updated_at)
+                MAX(updated_at),
+                COALESCE(SUM(CASE
+                    WHEN lower(trim(access_code_status)) IN ('yes', 'redeemed')
+                    THEN 1 ELSE 0
+                END), 0),
+                COALESCE(SUM(CASE
+                    WHEN lower(trim(access_code_status)) IN ('no', 'not redeemed')
+                    THEN 1 ELSE 0
+                END), 0)
             FROM students
             """
         ).fetchone()
@@ -813,6 +830,8 @@ def get_dashboard_data(db_path: str | Path | None = None) -> dict[str, Any]:
             "not_started": total - started,
             "completed": completed,
             "badges": badge_total,
+            "access_codes_redeemed": access_codes_redeemed,
+            "access_codes_not_redeemed": access_codes_not_redeemed,
             "average": round(average or 0, 1),
             "completion_rate": round(completed / total * 100, 1) if total else 0,
             "last_updated": latest,
